@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-02-13 11:12:15",
+  "system_status": {
+    "mode": "当前模式",
+    "signal_source": "当前信号源",
+    "source_status": "信号源状态",
+    "lock_status": "锁定状态",
+    "lock_indicator": "锁定指示"
+  },
+  "signal_params": {
+    "agc_threshold": "AGC门限",
+    "agc_voltage": "AGC电压",
+    "azimuth_error_voltage": "方位误差电压",
+    "pitch_error_voltage": "俯仰误差电压"
+  },
+  "tracking_data": {
+    "turntable_system": {
+      "guide_azimuth": "转台系引导方位角",
+      "guide_pitch": "转台系引导俯仰角",
+      "guide_tilt": "转台系引导倾斜角",
+      "current_azimuth": "转台系方位角",
+      "current_pitch": "转台系俯仰角",
+      "current_tilt": "转台系倾斜角",
+      "deviation_azimuth": "转台系方位偏差",
+      "deviation_pitch": "转台系俯仰偏差",
+      "deviation_tilt": "转台系倾斜偏差"
+    },
+    "geodetic_system": {
+      "guide_azimuth": "大地系引导方位角",
+      "guide_pitch": "大地系引导俯仰角",
+      "current_azimuth": "大地系方位角",
+      "current_pitch_alt": "大地系引导俯仰角.1",
+      "deviation_azimuth": "大地系方位偏差",
+      "deviation_pitch": "大地系俯仰偏差"
+    }
+  },
+  "motor_diagnostics": {
+    "motor_1": {
+      "power_on": "方位轴电机1上电",
+      "status": "方位轴电机1状态",
+      "current": "方位轴电机1电流",
+      "voltage": "方位轴电机1电压",
+      "inertia": "方位轴电机1转动惯量",
+      "temp": "方位轴电机1驱动器温度"
+    },
+    "motor_2": {
+      "power_on": "方位轴电机2上电",
+      "status": "方位轴电机2状态",
+      "current": "方位轴电机2电流",
+      "voltage": "方位轴电机2电压",
+      "inertia": "方位轴电机2转动惯量",
+      "temp": "方位轴电机2驱动器温度"
+    }
+  }
+}
