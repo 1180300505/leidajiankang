@@ -1,5 +1,17 @@
 <template>
   <section class="health-screen">
+    <button
+      v-if="hasActiveAlarm"
+      class="corner-alarm"
+      :class="[`severity-${alarmSeverity}`]"
+      type="button"
+      @click="goAlertsPage"
+      :title="alarmBannerText"
+    >
+      <span class="corner-alarm-icon">{{ alarmBannerIcon }}</span>
+      <span class="corner-alarm-text">{{ alarmBannerText }}</span>
+    </button>
+
     <header class="screen-header panel-box">
       <div class="header-nav">
         <button
@@ -31,25 +43,25 @@
         <article class="panel-box info-card">
           <h2 class="card-title">设备基本信息</h2>
           <div class="meta-row">
-            <span>设备: 节点1</span>
-            <span>时间: 2025-11</span>
+            <span>设备: {{ deviceLabel }}</span>
+            <span>时间: {{ displayTimestamp }}</span>
           </div>
           <div class="stats-grid">
             <div class="stat-item">
               <p class="label">健康分数</p>
-              <p class="value accent-pink">95</p>
+              <p class="value accent-pink">{{ healthScore }}</p>
             </div>
             <div class="stat-item">
               <p class="label">运行时长</p>
-              <p class="value accent-cyan">105d</p>
+              <p class="value accent-cyan">{{ runtimeLabel }}</p>
             </div>
             <div class="stat-item">
               <p class="label">异常次数</p>
-              <p class="value accent-yellow">0</p>
+              <p class="value accent-yellow">{{ abnormalCount }}</p>
             </div>
             <div class="stat-item">
               <p class="label">设备状态</p>
-              <p class="value accent-green">运行中</p>
+              <p class="value accent-green">{{ systemStatusText }}</p>
             </div>
           </div>
         </article>
@@ -57,17 +69,17 @@
         <article class="panel-box chart-card">
           <h2 class="card-title">设备运行状态监测</h2>
           <div class="meta-row">
-            <span>设备: 节点1</span>
-            <span>时间: 2025-11</span>
+            <span>设备: {{ deviceLabel }}</span>
+            <span>时间: {{ displayTimestamp }}</span>
           </div>
           <div class="ring-wrap">
-            <div class="ring ring-a"><span>18</span></div>
-            <div class="ring ring-b"><span>30</span></div>
+            <div class="ring ring-a" :style="ringStyles[0]"><span>{{ ringValues[0] }}</span></div>
+            <div class="ring ring-b" :style="ringStyles[1]"><span>{{ ringValues[1] }}</span></div>
           </div>
           <div class="legend-row">
-            <span><i class="dot dot-cyan"></i> 动作停止</span>
-            <span><i class="dot dot-green"></i> 速度控制器</span>
-            <span><i class="dot dot-purple"></i> 伺服驱动</span>
+            <span v-for="item in subsystemLegend" :key="item.id">
+              <i class="dot" :class="item.dotClass"></i> {{ item.name }}：{{ item.text }}
+            </span>
           </div>
         </article>
 
@@ -90,7 +102,7 @@
 
       <main class="center-col">
         <article class="panel-box hero-card">
-          <div class="hero-top">101 天线节点</div>
+          <div class="hero-top">{{ heroTitle }}</div>
           <div class="hero-body">
             <div class="model-core">
               <div class="antenna-dish left"></div>
@@ -133,9 +145,9 @@
             <h2 class="card-title">设备健康趋势</h2>
             <div class="trend-wrap">
               <svg viewBox="0 0 420 180" class="trend-svg">
-                <polyline points="20,130 80,80 140,110 200,60 260,100 320,50 380,95" />
-                <polyline points="20,100 80,120 140,70 200,90 260,75 320,95 380,70" class="line2" />
-                <polyline points="20,150 80,145 140,132 200,140 260,120 320,128 380,122" class="line3" />
+                <polyline :points="trendPolylines.main" />
+                <polyline :points="trendPolylines.secondary" class="line2" />
+                <polyline :points="trendPolylines.third" class="line3" />
               </svg>
             </div>
           </article>
@@ -161,9 +173,9 @@
 
         <article class="panel-box alarm-card alarm-entry" @click="goAlertsPage">
           <h2 class="card-title">报警信息</h2>
-          <div class="alarm-row"><span>描述</span><p>方位电机短时电流波动超阈值。</p></div>
-          <div class="alarm-row"><span>现象</span><p>瞬态抖动，控制恢复后回到稳定区间。</p></div>
-          <div class="alarm-row"><span>原因</span><p>环境突变与负载瞬时偏移叠加导致。</p></div>
+          <div class="alarm-row"><span>描述</span><p>{{ alarmInfo.description }}</p></div>
+          <div class="alarm-row"><span>现象</span><p>{{ alarmInfo.phenomenon }}</p></div>
+          <div class="alarm-row"><span>原因</span><p>{{ alarmInfo.cause }}</p></div>
         </article>
       </aside>
     </div>
@@ -171,7 +183,9 @@
 </template>
 
 <script setup>
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { createDashboardSocket } from '../socket/dashboardSocket'
 
 const router = useRouter()
 
@@ -200,38 +214,243 @@ const goAlertsPage = () => {
   router.push('/alerts')
 }
 
-const leftCallouts = [
-  { line1: '俯仰电机1电流    4.37', line2: '俯仰驱动器        加电' },
-  { line1: '方位减速机1      正常', line2: '方位减速机2      正常' },
-  { line1: '方位电机1电流    4.37', line2: '方位驱动器        加电' }
-]
+const dashboardPayload = ref(null)
+const lastUpdated = ref('')
+let dashboardSocket = null
 
-const rightCallouts = [
-  { line1: '当前俯仰角      2.37°', line2: '俯仰命令角      2.15°' },
-  { line1: '当前方位角      8.98°', line2: '方位命令角      7.24°' },
-  { line1: '方位电机2电流    2.87', line2: '方位驱动器        加电' }
-]
+const clamp = (value, min = 0, max = 100) => {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return min
+  return Math.min(max, Math.max(min, n))
+}
 
-const motors = [
-  { name: '电机1', time: '2026-02-01 12:30:54', current: '1.24 A', status: '良好' },
-  { name: '电机2', time: '2026-02-01 11:35:57', current: '1.74 A', status: '良好' },
-  { name: '电机3', time: '2026-02-01 10:09:33', current: '1.24 A', status: '良好' },
-  { name: '电机4', time: '2026-02-01 09:27:04', current: '2.01 A', status: '良好' }
-]
+const formatTime = (date = new Date()) => {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
 
-const faults = [
-  { status: '电流波动', level: '3级', time: '2025-10-05 18:01:21', part: '方位电机1', duration: '1小时' },
-  { status: '转速异常', level: '3级', time: '2025-10-05 18:01:21', part: '方位电机1', duration: '1小时' },
-  { status: '振动异常', level: '2级', time: '2025-10-05 18:01:21', part: '方位减速器2', duration: '5小时' },
-  { status: '变形偏差', level: '1级', time: '2025-10-05 18:01:21', part: '主轴', duration: '2小时' }
-]
+const statusTextByCode = (code) => {
+  if (Number(code) === 1) return '正常'
+  if (Number(code) === 2) return '关注'
+  if (Number(code) === 3) return '告警'
+  return '--'
+}
 
-const feedback = [
-  { name: '当前俯仰角输出', time: '2026-02-01 05:03:40', value: '1.37°', status: '良好' },
-  { name: '预计方位角输出', time: '2026-02-01 04:18:12', value: '5.35°', status: '良好' },
-  { name: '预计俯仰角输出', time: '2026-02-01 03:55:52', value: '0.52°', status: '良好' },
-  { name: '测量方位角输出', time: '2026-02-01 02:20:17', value: '1.14°', status: '良好' }
-]
+const statusLevelByCode = (code) => {
+  if (Number(code) === 3) return 3
+  if (Number(code) === 2) return 2
+  if (Number(code) === 1) return 1
+  return 0
+}
+
+const dashboardData = computed(() => dashboardPayload.value?.data ?? {})
+const overview = computed(() => dashboardData.value.overview ?? {})
+const health = computed(() => dashboardData.value.health ?? {})
+const subsystems = computed(() => (Array.isArray(overview.value.subsystems) ? overview.value.subsystems : []))
+const signals = computed(() => {
+  const raw = overview.value.signals
+  return raw && typeof raw === 'object' ? raw : {}
+})
+const signalEntries = computed(() =>
+  Object.entries(signals.value).map(([key, value], index) => ({
+    key,
+    index,
+    label: key.replace(/_/g, ' '),
+    value: Number(value) || 0
+  }))
+)
+
+const historyTrend = computed(() => overview.value.history_trend ?? {})
+const historyTimes = computed(() => (Array.isArray(historyTrend.value.times) ? historyTrend.value.times : []))
+const historyValues = computed(() =>
+  (Array.isArray(historyTrend.value.values) ? historyTrend.value.values : []).map((v) => clamp(v))
+)
+
+const radarData = computed(() => health.value.radar_data ?? {})
+const radarDimensions = computed(() => (Array.isArray(radarData.value.dimensions) ? radarData.value.dimensions : []))
+const radarScores = computed(() =>
+  (Array.isArray(radarData.value.scores) ? radarData.value.scores : []).map((v) => clamp(v))
+)
+
+const displayTimestamp = computed(() => lastUpdated.value || '--')
+const deviceLabel = computed(() => `天线节点${overview.value.system_mode ? `-${overview.value.system_mode}` : ''}`)
+const healthScore = computed(() => Math.round(clamp(health.value.current_score, 0, 999)))
+const runtimeLabel = computed(() => `${historyValues.value.length || 0}条`)
+const abnormalCount = computed(() => subsystems.value.filter((item) => Number(item.status) !== 1).length)
+const systemStatusText = computed(() => {
+  const maxLevel = subsystems.value.reduce((max, item) => Math.max(max, statusLevelByCode(item.status)), 0)
+  if (maxLevel >= 3) return '告警'
+  if (maxLevel >= 2) return '关注'
+  if (maxLevel >= 1) return '正常'
+  return '--'
+})
+
+const ringValues = computed(() => {
+  const values = signalEntries.value.map((item) => Math.round(clamp(item.value)))
+  return [values[0] ?? 0, values[1] ?? 0]
+})
+
+const ringStyles = computed(() => ([
+  { background: `conic-gradient(#2cecff 0 ${ringValues.value[0]}%, #123a72 ${ringValues.value[0]}% 100%)` },
+  { background: `conic-gradient(#8f6cff 0 ${ringValues.value[1]}%, #123a72 ${ringValues.value[1]}% 100%)` }
+]))
+
+const subsystemLegend = computed(() =>
+  subsystems.value.slice(0, 3).map((item, index) => ({
+    id: item.id ?? `${item.name}-${index}`,
+    name: item.name || `子系统${index + 1}`,
+    text: statusTextByCode(item.status),
+    dotClass: Number(item.status) === 3 ? 'dot-purple' : Number(item.status) === 2 ? 'dot-cyan' : 'dot-green'
+  }))
+)
+
+const motors = computed(() =>
+  subsystems.value.map((item, index) => ({
+    name: item.name || `电机${index + 1}`,
+    time: displayTimestamp.value,
+    current: `${(signalEntries.value[index]?.value ?? 0).toFixed(1)} A`,
+    status: statusTextByCode(item.status)
+  }))
+)
+
+const feedback = computed(() => {
+  const signalRows = signalEntries.value.map((item) => ({
+    name: item.label,
+    time: displayTimestamp.value,
+    value: item.value.toFixed(1),
+    status: '良好'
+  }))
+  const radarRows = radarDimensions.value.map((name, index) => ({
+    name,
+    time: displayTimestamp.value,
+    value: `${Math.round(radarScores.value[index] ?? 0)}分`,
+    status: (radarScores.value[index] ?? 0) >= 75 ? '良好' : '关注'
+  }))
+  return [...signalRows, ...radarRows].slice(0, 6)
+})
+
+const faults = computed(() =>
+  subsystems.value
+    .filter((item) => Number(item.status) > 1)
+    .map((item) => ({
+      status: statusTextByCode(item.status),
+      level: Number(item.status) === 3 ? '3级' : '2级',
+      time: displayTimestamp.value,
+      part: item.name || '未知部位',
+      duration: '--'
+    }))
+)
+
+const leftCallouts = computed(() => [
+  {
+    line1: `信号1 ${signalEntries.value[0]?.value?.toFixed?.(1) ?? '0.0'}`,
+    line2: `信号2 ${signalEntries.value[1]?.value?.toFixed?.(1) ?? '0.0'}`
+  },
+  {
+    line1: `${subsystems.value[0]?.name || '子系统1'} ${statusTextByCode(subsystems.value[0]?.status)}`,
+    line2: `${subsystems.value[1]?.name || '子系统2'} ${statusTextByCode(subsystems.value[1]?.status)}`
+  },
+  {
+    line1: `信号3 ${signalEntries.value[2]?.value?.toFixed?.(1) ?? '0.0'}`,
+    line2: `更新 ${displayTimestamp.value}`
+  }
+])
+
+const rightCallouts = computed(() => [
+  {
+    line1: `模式 ${overview.value.system_mode || '--'}`,
+    line2: `健康分 ${healthScore.value}`
+  },
+  {
+    line1: `${radarDimensions.value[0] || '维度1'} ${Math.round(radarScores.value[0] ?? 0)}分`,
+    line2: `${radarDimensions.value[1] || '维度2'} ${Math.round(radarScores.value[1] ?? 0)}分`
+  },
+  {
+    line1: `${radarDimensions.value[2] || '维度3'} ${Math.round(radarScores.value[2] ?? 0)}分`,
+    line2: `${radarDimensions.value[3] || '维度4'} ${Math.round(radarScores.value[3] ?? 0)}分`
+  }
+])
+
+const heroTitle = computed(() => `${overview.value.system_mode || '--'} 模式 / 天线节点`)
+
+const buildPolyline = (values) => {
+  const safeValues = Array.isArray(values) && values.length ? values : [0, 0, 0, 0, 0, 0, 0]
+  const startX = 20
+  const endX = 380
+  const step = safeValues.length === 1 ? 0 : (endX - startX) / (safeValues.length - 1)
+  return safeValues
+    .map((value, index) => {
+      const x = Math.round(startX + step * index)
+      const y = Math.round(160 - clamp(value) * 1.2)
+      return `${x},${y}`
+    })
+    .join(' ')
+}
+
+const trendPolylines = computed(() => {
+  const main = historyValues.value.length ? historyValues.value : [0, 0, 0, 0, 0, 0, 0]
+  const secondary = main.map((value, index, arr) => {
+    const prev = arr[index - 1] ?? value
+    const next = arr[index + 1] ?? value
+    return Math.round((prev + value + next) / 3)
+  })
+  const third = historyTimes.value.length
+    ? historyTimes.value.map((_, index) => Math.round((radarScores.value[index % Math.max(radarScores.value.length, 1)] ?? 0) * 0.8))
+    : main.map(() => Math.round((radarScores.value[0] ?? 0) * 0.8))
+
+  return {
+    main: buildPolyline(main),
+    secondary: buildPolyline(secondary),
+    third: buildPolyline(third)
+  }
+})
+
+const alarmInfo = computed(() => {
+  const firstAbnormal = subsystems.value.find((item) => Number(item.status) > 1)
+  if (!firstAbnormal) {
+    return {
+      description: '当前未检测到子系统异常报警。',
+      phenomenon: `系统模式 ${overview.value.system_mode || '--'}，整体状态 ${systemStatusText.value}。`,
+      cause: '等待后端推送新的诊断结果。'
+    }
+  }
+
+  return {
+    description: `${firstAbnormal.name || '子系统'}状态为${statusTextByCode(firstAbnormal.status)}。`,
+    phenomenon: `健康分 ${healthScore.value}，异常子系统数量 ${abnormalCount.value}。`,
+    cause: '来源于 dashboard_json 子系统状态判定结果。'
+  }
+})
+
+const maxAlarmLevel = computed(() =>
+  subsystems.value.reduce((max, item) => Math.max(max, statusLevelByCode(item.status)), 0)
+)
+
+const hasActiveAlarm = computed(() => maxAlarmLevel.value >= 2)
+const alarmSeverity = computed(() => (maxAlarmLevel.value >= 3 ? 'critical' : 'warning'))
+const alarmBannerIcon = computed(() => (alarmSeverity.value === 'critical' ? '!' : '≈'))
+const alarmBannerText = computed(() => {
+  if (alarmSeverity.value === 'critical') {
+    return `严重故障：${abnormalCount.value} 项异常，点击查看`
+  }
+  return `一般故障：${abnormalCount.value} 项异常，点击查看`
+})
+
+onMounted(() => {
+  dashboardSocket = createDashboardSocket({
+    onDashboardUpdate: (payload) => {
+      dashboardPayload.value = payload
+      lastUpdated.value = formatTime()
+    }
+  })
+})
+
+onUnmounted(() => {
+  if (dashboardSocket) {
+    dashboardSocket.disconnect()
+    dashboardSocket = null
+  }
+})
 </script>
 
 <style scoped>
@@ -251,6 +470,83 @@ const feedback = [
   box-shadow:
     inset 0 0 40px rgba(15, 101, 193, 0.25),
     0 0 26px rgba(0, 176, 255, 0.22);
+}
+
+.corner-alarm {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 8px 12px 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+  color: #fff;
+  background: rgba(8, 20, 46, 0.88);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.22);
+  animation: alarmPulse 1s ease-in-out infinite;
+}
+
+.corner-alarm-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  line-height: 1;
+  font-size: 15px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.corner-alarm-text {
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.corner-alarm.severity-warning {
+  border-color: rgba(255, 224, 102, 0.55);
+  color: #fff6bf;
+  background: linear-gradient(180deg, rgba(90, 66, 8, 0.92), rgba(58, 43, 6, 0.92));
+  box-shadow:
+    0 0 14px rgba(255, 217, 90, 0.35),
+    inset 0 0 12px rgba(255, 202, 72, 0.16);
+}
+
+.corner-alarm.severity-warning .corner-alarm-icon {
+  color: #2e2200;
+  background: radial-gradient(circle, #ffe46f, #ffbf3d);
+  box-shadow: 0 0 10px rgba(255, 216, 87, 0.45);
+}
+
+.corner-alarm.severity-critical {
+  border-color: rgba(255, 107, 124, 0.62);
+  color: #ffe1e6;
+  background: linear-gradient(180deg, rgba(108, 14, 28, 0.92), rgba(69, 8, 16, 0.92));
+  box-shadow:
+    0 0 16px rgba(255, 82, 109, 0.36),
+    inset 0 0 14px rgba(255, 95, 95, 0.18);
+}
+
+.corner-alarm.severity-critical .corner-alarm-icon {
+  color: #fff;
+  background: radial-gradient(circle, #ff5f74, #d31735);
+  box-shadow: 0 0 12px rgba(255, 91, 114, 0.52);
+}
+
+@keyframes alarmPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.02);
+  }
 }
 
 .health-screen::before {
@@ -708,6 +1004,13 @@ const feedback = [
 }
 
 @media (max-width: 880px) {
+  .corner-alarm {
+    position: static;
+    width: 100%;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+
   .screen-header {
     grid-template-columns: 1fr;
     justify-items: center;

@@ -26,40 +26,6 @@
       <main class="content">
         <template v-if="activeMenu === leftMenus[0]">
         <section class="workspace-panel panel-box">
-          <div class="workspace-headline">
-            <div class="workspace-title">历史查询与数据监控中心</div>
-            <div class="workspace-meta">查询条件 + 摘要信息 + 监控日志一体化展示</div>
-          </div>
-
-          <div class="top-controls">
-            <section class="query-box workspace-card">
-              <div class="query-grid">
-                <label>名称: <input /></label>
-                <label>编号: <input /></label>
-                <label>选择类型: <input /></label>
-                <label>关键字: <input placeholder="请输入关键字" /></label>
-                <label>起始日期: <input /></label>
-                <label>终止日期: <input /></label>
-                <label>星级: <input /></label>
-                <label>关键字: <input placeholder="请输入关键字" /></label>
-              </div>
-              <div class="query-actions">
-                <label><input type="checkbox" /> 方式一</label>
-                <label><input type="checkbox" /> 方式二</label>
-                <label><input type="checkbox" /> 方式三</label>
-                <button>查询</button>
-              </div>
-            </section>
-
-            <section class="info-row workspace-card">
-              <div>相关设备 <strong>CarDem1</strong></div>
-              <div>平均信号变化 <strong>2-15</strong></div>
-              <div>通信 <strong>三角波</strong></div>
-              <div>平均故障情况 <strong>21.59h</strong></div>
-              <div>传感器位置 <strong>主轴承2</strong></div>
-            </section>
-          </div>
-
         <section class="monitor-panel workspace-card">
           <div class="monitor-header">
             <div class="monitor-title">设备运行日志监控 (SQLite + Flask)</div>
@@ -386,35 +352,6 @@ onMounted(() => {
   padding: 12px;
 }
 
-.workspace-headline {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 10px 12px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid rgba(88, 196, 255, 0.18);
-}
-
-.workspace-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #b8efff;
-  letter-spacing: 1px;
-}
-
-.workspace-meta {
-  font-size: 12px;
-  color: #87dfff;
-}
-
-.top-controls {
-  display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
 .workspace-card {
   position: relative;
   border-radius: 10px;
@@ -685,7 +622,14 @@ text {
 }
 
 .monitor-panel {
-  padding: 12px;
+  padding: 14px;
+  border: 1px solid rgba(104, 208, 255, 0.22);
+  background:
+    radial-gradient(circle at 96% 0%, rgba(117, 121, 255, 0.06), transparent 42%),
+    linear-gradient(180deg, rgba(10, 38, 94, 0.78), rgba(6, 24, 68, 0.86));
+  box-shadow:
+    inset 0 0 20px rgba(78, 173, 255, 0.08),
+    0 8px 16px rgba(6, 21, 59, 0.18);
 }
 
 .monitor-header {
@@ -715,30 +659,37 @@ text {
   border-radius: 8px;
   border: 1px solid rgba(94, 190, 255, 0.16);
   background: rgba(9, 31, 78, 0.42);
+  box-shadow: inset 0 0 10px rgba(92, 196, 255, 0.05);
 }
 
 .monitor-table {
-  margin-top: 12px;
+  margin-top: 14px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(94, 190, 255, 0.14);
+  background: rgba(7, 25, 66, 0.45);
 }
 
 .pagination-container {
-  margin-top: 12px;
+  margin-top: 14px;
   display: flex;
   justify-content: flex-end;
-  padding-top: 8px;
+  padding: 10px 4px 2px;
   border-top: 1px solid rgba(88, 196, 255, 0.12);
 }
 
 :deep(.monitor-table .el-table) {
-  --el-table-bg-color: rgba(8, 28, 70, 0.9);
-  --el-table-tr-bg-color: rgba(8, 28, 70, 0.9);
-  --el-table-header-bg-color: rgba(14, 52, 120, 0.95);
-  --el-table-border-color: rgba(86, 187, 255, 0.25);
-  --el-table-row-hover-bg-color: rgba(42, 114, 204, 0.18);
+  --el-table-bg-color: rgba(8, 28, 70, 0.35);
+  --el-table-tr-bg-color: rgba(8, 28, 70, 0.15);
+  --el-table-header-bg-color: rgba(14, 52, 120, 0.72);
+  --el-table-border-color: rgba(86, 187, 255, 0.18);
+  --el-table-row-hover-bg-color: rgba(57, 142, 241, 0.16);
   --el-table-text-color: #d9f4ff;
   --el-table-header-text-color: #9fe7ff;
   --el-fill-color-blank: transparent;
   background: transparent;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 :deep(.monitor-table .el-table__inner-wrapper::before) {
@@ -757,6 +708,10 @@ text {
 
 :deep(.monitor-table .el-table th.el-table__cell) {
   background: rgba(14, 52, 120, 0.82) !important;
+  border-bottom-color: rgba(115, 214, 255, 0.22) !important;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  height: 42px;
 }
 
 :deep(.monitor-table .el-table td.el-table__cell),
@@ -764,8 +719,31 @@ text {
   background: transparent !important;
 }
 
+:deep(.monitor-table .el-table td.el-table__cell) {
+  border-bottom-color: rgba(86, 187, 255, 0.12) !important;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+:deep(.monitor-table .el-table__body tr:nth-child(2n) > td.el-table__cell) {
+  background: rgba(255, 255, 255, 0.015) !important;
+}
+
+:deep(.monitor-table .el-table__body tr:hover > td.el-table__cell) {
+  box-shadow: inset 0 0 0 999px rgba(52, 136, 237, 0.08);
+}
+
 :deep(.monitor-table .el-table__expanded-cell) {
   background: rgba(8, 28, 70, 0.5) !important;
+}
+
+:deep(.monitor-table .el-tag) {
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+:deep(.monitor-table .el-button.is-link) {
+  font-weight: 600;
 }
 
 :deep(.monitor-toolbar .el-input__wrapper),
@@ -783,6 +761,13 @@ text {
   --el-pagination-button-color: #cfeeff;
   --el-pagination-button-bg-color: rgba(11, 41, 94, 0.9);
   --el-pagination-hover-color: #7ee6ff;
+}
+
+:deep(.pagination-container .el-pagination .btn-prev),
+:deep(.pagination-container .el-pagination .btn-next),
+:deep(.pagination-container .el-pagination .el-pager li) {
+  border-radius: 6px;
+  border: 1px solid rgba(98, 199, 255, 0.12);
 }
 
 @media (max-width: 1300px) {
