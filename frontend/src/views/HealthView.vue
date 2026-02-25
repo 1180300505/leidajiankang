@@ -176,11 +176,13 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 const topLeftTabs = [
+  { label: 'IP设置', route: '/demo/ip' },
   { label: '设备管理' },
   { label: '系统自检' },
   { label: '状态监测' },
   { label: '数据管理', route: '/realtime' }
 ]
+
 const topRightTabs = [
   { label: '用户管理' },
   { label: '历史查询', route: '/health-history' },
@@ -199,15 +201,15 @@ const goAlertsPage = () => {
 }
 
 const leftCallouts = [
-  { line1: '俯仰电机1电流     4.37', line2: '俯仰驱动器1        加电' },
-  { line1: '方位减速机1        正常', line2: '方位减速机2        正常' },
-  { line1: '方位电机1电流      4.37', line2: '方位驱动器1        加电' }
+  { line1: '俯仰电机1电流    4.37', line2: '俯仰驱动器        加电' },
+  { line1: '方位减速机1      正常', line2: '方位减速机2      正常' },
+  { line1: '方位电机1电流    4.37', line2: '方位驱动器        加电' }
 ]
 
 const rightCallouts = [
-  { line1: '当前俯仰角        2.37°', line2: '俯仰命令角        2.15°' },
-  { line1: '当前方位角        8.98°', line2: '方位命令角        7.24°' },
-  { line1: '方位电机2电流      2.87', line2: '方位驱动器2        加电' }
+  { line1: '当前俯仰角      2.37°', line2: '俯仰命令角      2.15°' },
+  { line1: '当前方位角      8.98°', line2: '方位命令角      7.24°' },
+  { line1: '方位电机2电流    2.87', line2: '方位驱动器        加电' }
 ]
 
 const motors = [
@@ -219,7 +221,7 @@ const motors = [
 
 const faults = [
   { status: '电流波动', level: '3级', time: '2025-10-05 18:01:21', part: '方位电机1', duration: '1小时' },
-  { status: '轴速异常', level: '3级', time: '2025-10-05 18:01:21', part: '方位电机1', duration: '1小时' },
+  { status: '转速异常', level: '3级', time: '2025-10-05 18:01:21', part: '方位电机1', duration: '1小时' },
   { status: '振动异常', level: '2级', time: '2025-10-05 18:01:21', part: '方位减速器2', duration: '5小时' },
   { status: '变形偏差', level: '1级', time: '2025-10-05 18:01:21', part: '主轴', duration: '2小时' }
 ]
@@ -727,3 +729,4 @@ const feedback = [
   }
 }
 </style>
+

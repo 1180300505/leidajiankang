@@ -3,136 +3,305 @@
     <header class="screen-header">
       <button class="nav-btn" @click="goBack">返回</button>
       <h1>故障告警</h1>
-      <button class="nav-btn">生成故障报告</button>
+      <div class="header-actions">
+        <button class="nav-btn ghost" :disabled="loading" @click="refreshData">
+          {{ loading ? '刷新中...' : '刷新数据' }}
+        </button>
+        <button class="nav-btn">生成故障报告</button>
+      </div>
     </header>
 
     <div class="top-grid">
-      <article class="panel">
+      <article class="panel gauge-panel">
         <h2>设备健康状态</h2>
-        <div class="pie-wrap">
-          <div class="pie"></div>
-          <ul>
-            <li><i class="c1"></i> 正常: 405</li>
-            <li><i class="c2"></i> 事件: 40</li>
-            <li><i class="c3"></i> 异常: 30</li>
-          </ul>
+        <div class="gauge-wrap">
+          <div
+            class="gauge"
+            :style="{
+              '--pct': `${safeTodayScore}%`,
+              '--gauge-color': statusColor(summary.today_score)
+            }"
+          >
+            <div class="gauge-inner">
+              <strong>{{ safeTodayScore }}</strong>
+              <span>今日健康分</span>
+            </div>
+          </div>
+          <div class="status-block">
+            <p class="status-title">当前健康等级</p>
+            <p class="status-text" :style="{ color: statusColor(summary.today_score) }">
+              {{ statusText(summary.today_score) }}
+            </p>
+            <p class="status-note">
+              平均健康分：<b>{{ safeAverageScore }}</b>
+            </p>
+          </div>
         </div>
       </article>
 
-      <article class="panel center-panel">
-        <h2>故障位置评估</h2>
+      <article class="panel summary-panel">
+        <h2>健康度评估概览</h2>
+        <div class="summary-grid">
+          <div class="metric-card">
+            <label>采样天数</label>
+            <strong>{{ dailyScores.length }}</strong>
+          </div>
+          <div class="metric-card">
+            <label>优良天数</label>
+            <strong class="ok">{{ healthyDays }}</strong>
+          </div>
+          <div class="metric-card">
+            <label>关注天数</label>
+            <strong class="warn">{{ warningDays }}</strong>
+          </div>
+          <div class="metric-card">
+            <label>故障总次数</label>
+            <strong class="danger">{{ totalFaults }}</strong>
+          </div>
+        </div>
+
         <div class="fault-bars">
-          <div v-for="(item, i) in positionBars" :key="i" class="fault-row">
-            <span>{{ item.name }}</span>
-            <div class="track"><i :style="{ width: item.value }"></i></div>
-            <em>{{ item.value }}</em>
+          <div v-for="item in faultRank" :key="item.date" class="fault-row">
+            <span>{{ item.display_date || item.date }}</span>
+            <div class="track"><i :style="{ width: `${item.ratio}%` }"></i></div>
+            <em>{{ item.fault_count }} 次</em>
           </div>
-        </div>
-        <div class="severity-box">
-          <h3>故障严重程度评估</h3>
-          <div class="severity-track">
-            <i style="width: 65.5%"></i>
-            <i style="width: 10.5%"></i>
-            <i style="width: 10.5%"></i>
-            <i style="width: 9.5%"></i>
-          </div>
-          <p class="severity-text">中等严重</p>
+          <p v-if="!faultRank.length" class="empty-tip">暂无历史数据</p>
         </div>
       </article>
 
-      <article class="panel device-panel">
-        <h2>故障子系统</h2>
-        <div class="device-model">
-          <div class="dish left"></div>
-          <div class="dish right"></div>
-          <div class="neck"></div>
-          <div class="base"></div>
-          <span class="line l1"></span>
-          <span class="line l2"></span>
-          <span class="line l3"></span>
+      <article class="panel status-panel">
+        <h2>系统健康等级分布</h2>
+        <div class="distribution">
+          <div class="dist-item">
+            <span>优</span>
+            <div class="dist-track"><i class="good" :style="{ width: `${gradeRates.good}%` }"></i></div>
+            <em>{{ gradeCounts.good }}</em>
+          </div>
+          <div class="dist-item">
+            <span>良</span>
+            <div class="dist-track"><i class="fair" :style="{ width: `${gradeRates.fair}%` }"></i></div>
+            <em>{{ gradeCounts.fair }}</em>
+          </div>
+          <div class="dist-item">
+            <span>差</span>
+            <div class="dist-track"><i class="poor" :style="{ width: `${gradeRates.poor}%` }"></i></div>
+            <em>{{ gradeCounts.poor }}</em>
+          </div>
+        </div>
+
+        <div class="health-legend">
+          <p>最近一周趋势：<b>{{ trendDirection }}</b></p>
+          <p>最高分：<b>{{ maxScore }}</b></p>
+          <p>最低分：<b>{{ minScore }}</b></p>
+          <p v-if="errorMessage" class="error-text">{{ errorMessage }}</p>
         </div>
       </article>
     </div>
 
     <div class="bottom-grid">
-      <article class="panel chart">
-        <h2>故障信号及数值</h2>
-        <svg viewBox="0 0 320 180">
-          <rect x="40" y="130" width="34" height="40" class="b1" />
-          <rect x="95" y="75" width="34" height="95" class="b2" />
-          <rect x="150" y="35" width="34" height="135" class="b3" />
-          <rect x="205" y="75" width="34" height="95" class="b4" />
-          <line x1="30" y1="170" x2="300" y2="170" class="axis" />
-          <text x="45" y="176">NN</text>
-          <text x="100" y="176">IP</text>
-          <text x="155" y="176">NP</text>
-          <text x="210" y="176">CPU</text>
+      <article class="panel chart-panel trend-panel">
+        <h2>健康度变化趋势</h2>
+        <svg viewBox="0 0 680 260" preserveAspectRatio="none">
+          <g class="grid-lines">
+            <line v-for="y in [40, 80, 120, 160, 200]" :key="`g-${y}`" x1="60" :y1="y" x2="650" :y2="y" />
+          </g>
+          <line class="axis" x1="60" y1="220" x2="650" y2="220" />
+          <line class="axis" x1="60" y1="20" x2="60" y2="220" />
+
+          <polyline v-if="trendPolyline" class="score-line" :points="trendPolyline" />
+          <polyline v-if="faultPolyline" class="fault-line" :points="faultPolyline" />
+
+          <g v-for="(p, idx) in plotPoints" :key="`p-${idx}`">
+            <circle class="score-dot" :cx="p.x" :cy="p.yScore" r="4" />
+            <circle class="fault-dot" :cx="p.x" :cy="p.yFault" r="3.5" />
+            <text class="score-label" :x="p.x" :y="p.yScore - 10">{{ p.score }}</text>
+            <text class="fault-label" :x="p.x" :y="p.yFault + 16">{{ p.fault_count }}</text>
+            <text class="x-label" :x="p.x" y="242">{{ shortDate(p.display_date || p.date) }}</text>
+          </g>
         </svg>
       </article>
 
-      <article class="panel chart">
-        <h2>故障风险预测</h2>
-        <svg viewBox="0 0 320 180">
-          <polyline points="40,150 90,70 140,65 190,45 240,8" class="pline" />
-          <line x1="30" y1="170" x2="300" y2="170" class="axis" />
-          <text x="30" y="176">00:00</text>
-          <text x="120" y="176">12:00</text>
-          <text x="220" y="176">24:00</text>
-        </svg>
-      </article>
-
-      <article class="panel chart">
-        <h2>故障类型评估</h2>
-        <div class="mini-bars">
-          <div v-for="(item, i) in typeBars" :key="i" class="mini-row">
-            <span>{{ item.name }}</span>
-            <div class="multi-track">
-              <i class="m1" :style="{ width: item.v1 }"></i>
-              <i class="m2" :style="{ width: item.v2 }"></i>
-              <i class="m3" :style="{ width: item.v3 }"></i>
-              <i class="m4" :style="{ width: item.v4 }"></i>
-            </div>
-          </div>
+      <article class="panel chart-panel list-panel">
+        <h2>健康监测记录表</h2>
+        <div class="table-head">
+          <span>日期</span>
+          <span>健康分</span>
+          <span>等级</span>
+          <span>故障次数</span>
         </div>
-      </article>
-
-      <article class="panel chart">
-        <h2>故障评估分布</h2>
-        <svg viewBox="0 0 320 180">
-          <polygon points="160,20 250,70 220,150 100,150 70,70" class="mesh" />
-          <polygon points="160,45 215,75 198,130 122,130 105,75" class="mesh" />
-          <polygon points="160,30 230,70 206,142 114,120 82,78" class="shape1" />
-          <polygon points="160,52 198,78 188,116 130,122 112,86" class="shape2" />
-        </svg>
+        <div class="table-body">
+          <div v-for="row in dailyScores" :key="row.date" class="table-row">
+            <span>{{ row.display_date || row.date }}</span>
+            <span>{{ row.score }}</span>
+            <span :class="['level-pill', levelClass(row.score)]">{{ statusText(row.score) }}</span>
+            <span>{{ row.fault_count }}</span>
+          </div>
+          <div v-if="!dailyScores.length && !loading" class="table-empty">暂无记录</div>
+          <div v-if="loading" class="table-empty">数据加载中...</div>
+        </div>
       </article>
     </div>
   </section>
 </template>
 
 <script setup>
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
+import { API_PREFIX } from '../config/backend'
 
 const router = useRouter()
+
+const dailyScores = ref([])
+const summary = ref({ today_score: 100, average_score: 100 })
+const loading = ref(false)
+const errorMessage = ref('')
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0))
+
+const safeTodayScore = computed(() => Math.round(clamp(summary.value.today_score, 0, 100)))
+const safeAverageScore = computed(() => Math.round(clamp(summary.value.average_score, 0, 100)))
+
+const gradeCounts = computed(() => {
+  const base = { good: 0, fair: 0, poor: 0 }
+  dailyScores.value.forEach((item) => {
+    const score = Number(item.score) || 0
+    if (score >= 90) base.good += 1
+    else if (score >= 75) base.fair += 1
+    else base.poor += 1
+  })
+  return base
+})
+
+const gradeRates = computed(() => {
+  const total = dailyScores.value.length || 1
+  const counts = gradeCounts.value
+  return {
+    good: Math.round((counts.good / total) * 100),
+    fair: Math.round((counts.fair / total) * 100),
+    poor: Math.round((counts.poor / total) * 100)
+  }
+})
+
+const healthyDays = computed(() => gradeCounts.value.good + gradeCounts.value.fair)
+const warningDays = computed(() => gradeCounts.value.poor)
+const totalFaults = computed(() =>
+  dailyScores.value.reduce((sum, item) => sum + (Number(item.fault_count) || 0), 0)
+)
+
+const maxScore = computed(() => {
+  if (!dailyScores.value.length) return '--'
+  return Math.max(...dailyScores.value.map((item) => Number(item.score) || 0))
+})
+
+const minScore = computed(() => {
+  if (!dailyScores.value.length) return '--'
+  return Math.min(...dailyScores.value.map((item) => Number(item.score) || 0))
+})
+
+const trendDirection = computed(() => {
+  if (dailyScores.value.length < 2) return '数据不足'
+  const first = Number(dailyScores.value[0].score) || 0
+  const last = Number(dailyScores.value[dailyScores.value.length - 1].score) || 0
+  if (last > first) return '上升'
+  if (last < first) return '下降'
+  return '持平'
+})
+
+const faultRank = computed(() => {
+  const list = dailyScores.value
+    .map((item) => ({
+      ...item,
+      fault_count: Number(item.fault_count) || 0
+    }))
+    .sort((a, b) => b.fault_count - a.fault_count)
+    .slice(0, 5)
+  const maxFault = Math.max(1, ...list.map((item) => item.fault_count))
+  return list.map((item) => ({
+    ...item,
+    ratio: Math.round((item.fault_count / maxFault) * 100)
+  }))
+})
+
+const plotPoints = computed(() => {
+  const list = dailyScores.value.slice(0, 7)
+  if (!list.length) return []
+
+  const startX = 90
+  const endX = 620
+  const step = list.length === 1 ? 0 : (endX - startX) / (list.length - 1)
+  const maxFault = Math.max(1, ...list.map((item) => Number(item.fault_count) || 0))
+
+  return list.map((item, index) => {
+    const score = clamp(item.score, 0, 100)
+    const fault = clamp(item.fault_count, 0, maxFault)
+    return {
+      ...item,
+      score: Math.round(score),
+      fault_count: Math.round(fault),
+      x: Math.round(startX + step * index),
+      yScore: Math.round(220 - score * 1.9),
+      yFault: Math.round(220 - (fault / maxFault) * 180)
+    }
+  })
+})
+
+const trendPolyline = computed(() =>
+  plotPoints.value.length ? plotPoints.value.map((p) => `${p.x},${p.yScore}`).join(' ') : ''
+)
+
+const faultPolyline = computed(() =>
+  plotPoints.value.length ? plotPoints.value.map((p) => `${p.x},${p.yFault}`).join(' ') : ''
+)
+
+const statusText = (score) => {
+  const n = Number(score) || 0
+  if (n >= 90) return '优'
+  if (n >= 75) return '良'
+  return '差'
+}
+
+const statusColor = (score) => {
+  const n = Number(score) || 0
+  if (n >= 90) return '#44f2a6'
+  if (n >= 75) return '#ffd75e'
+  return '#ff6a7b'
+}
+
+const levelClass = (score) => {
+  const n = Number(score) || 0
+  if (n >= 90) return 'good'
+  if (n >= 75) return 'fair'
+  return 'poor'
+}
+
+const shortDate = (value) => {
+  if (!value) return '--'
+  const s = String(value)
+  return s.includes('-') ? s.slice(5) : s
+}
+
+const refreshData = async () => {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const res = await axios.get(`${API_PREFIX}/health/daily-report`)
+    dailyScores.value = Array.isArray(res.data?.data) ? res.data.data : []
+    summary.value = res.data?.summary || { today_score: 100, average_score: 100 }
+  } catch (error) {
+    errorMessage.value = '健康监测数据加载失败'
+    console.error('加载健康监测数据失败', error)
+  } finally {
+    loading.value = false
+  }
+}
 
 const goBack = () => {
   router.push('/health')
 }
 
-const positionBars = [
-  { name: '检查项一', value: '88.88%' },
-  { name: '检查项二', value: '77.77%' },
-  { name: '检查项三', value: '66.66%' },
-  { name: '检查项四', value: '44.44%' },
-  { name: '检查项五', value: '33.33%' }
-]
-
-const typeBars = [
-  { name: '检查点一', v1: '18%', v2: '15%', v3: '22%', v4: '20%' },
-  { name: '检查点二', v1: '16%', v2: '14%', v3: '21%', v4: '19%' },
-  { name: '检查点三', v1: '14%', v2: '12%', v3: '24%', v4: '19%' },
-  { name: '检查点四', v1: '13%', v2: '10%', v3: '18%', v4: '17%' },
-  { name: '检查点五', v1: '9%', v2: '8%', v3: '13%', v4: '14%' }
-]
+onMounted(refreshData)
 </script>
 
 <style scoped>
@@ -144,8 +313,6 @@ const typeBars = [
   --line-soft: rgba(83, 199, 255, 0.2);
   --text-main: #d8f4ff;
   --text-dim: #9cdcf2;
-  --danger: #ff5757;
-  --accent: #65ddff;
 }
 
 .alert-screen {
@@ -153,16 +320,20 @@ const typeBars = [
   isolation: isolate;
   overflow: hidden;
   min-height: calc(100vh - 20px);
-  padding: 10px;
+  padding: 12px;
   color: var(--text-main);
-  border: 2px solid #1ec4ff;
+  border: 1px solid rgba(63, 203, 255, 0.55);
+  border-radius: 14px;
   background:
-    radial-gradient(1200px 500px at 50% -100px, rgba(95, 157, 255, 0.25), transparent 70%),
-    radial-gradient(800px 360px at 90% 5%, rgba(39, 206, 255, 0.16), transparent 72%),
-    linear-gradient(180deg, var(--bg-1), var(--bg-2) 48%, var(--bg-3));
+    radial-gradient(1200px 500px at 50% -100px, rgba(95, 157, 255, 0.22), transparent 70%),
+    radial-gradient(900px 420px at 92% 4%, rgba(39, 206, 255, 0.14), transparent 72%),
+    radial-gradient(700px 360px at 8% 12%, rgba(114, 126, 255, 0.1), transparent 72%),
+    linear-gradient(180deg, #061237 0%, #09245c 46%, #07194a 100%);
   box-shadow:
-    inset 0 0 44px rgba(14, 123, 224, 0.28),
-    0 0 24px rgba(13, 177, 255, 0.35);
+    inset 0 0 44px rgba(14, 123, 224, 0.22),
+    inset 0 0 120px rgba(12, 36, 96, 0.24),
+    0 12px 34px rgba(5, 18, 52, 0.45),
+    0 0 20px rgba(13, 177, 255, 0.22);
 }
 
 .alert-screen::before {
@@ -176,64 +347,154 @@ const typeBars = [
   background-size: 34px 34px;
 }
 
+.alert-screen::after {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(102, 212, 255, 0.12);
+  pointer-events: none;
+}
+
 .screen-header {
+  position: relative;
   display: grid;
-  grid-template-columns: 120px 1fr 170px;
+  grid-template-columns: 120px 1fr auto;
   gap: 10px;
   align-items: center;
+  padding: 6px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(10, 34, 82, 0.7), rgba(8, 24, 63, 0.68));
+  border: 1px solid rgba(88, 203, 255, 0.18);
+  box-shadow: inset 0 0 18px rgba(57, 160, 255, 0.08);
 }
 
 .screen-header h1 {
   margin: 0;
   text-align: center;
-  background: linear-gradient(180deg, #143e8a, #102f6f);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: #ff6a6a;
-  font-size: 40px;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(113, 201, 255, 0.07), transparent 25%, transparent 75%, rgba(113, 201, 255, 0.07)),
+    linear-gradient(180deg, #143e8a, #102f6f);
+  border: 1px solid rgba(88, 212, 255, 0.32);
+  border-radius: 10px;
+  color: #ff777e;
+  font-size: 34px;
   letter-spacing: 4px;
-  padding: 10px 0;
+  padding: 12px 0;
   text-shadow: 0 0 14px rgba(255, 102, 102, 0.45);
   box-shadow:
-    inset 0 0 14px rgba(74, 164, 255, 0.25),
-    0 0 12px rgba(38, 177, 255, 0.22);
+    inset 0 0 18px rgba(74, 164, 255, 0.2),
+    inset 0 -8px 18px rgba(6, 17, 48, 0.28),
+    0 0 12px rgba(38, 177, 255, 0.16);
+}
+
+.screen-header h1::before,
+.screen-header h1::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 36px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(135, 231, 255, 0.7), transparent);
+}
+
+.screen-header h1::before {
+  left: 12px;
+}
+
+.screen-header h1::after {
+  right: 12px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .nav-btn {
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, #2a61bf, #1d468f);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(110, 220, 255, 0.28);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.05), transparent 40%),
+    linear-gradient(180deg, #2a61bf, #1d468f);
   color: #e6f8ff;
-  font-size: 19px;
-  border-radius: 8px;
-  padding: 9px 10px;
+  font-size: 16px;
+  border-radius: 10px;
+  padding: 9px 12px;
   transition: all 0.2s ease;
+  cursor: pointer;
+  box-shadow:
+    inset 0 0 10px rgba(83, 184, 255, 0.12),
+    0 4px 10px rgba(7, 20, 55, 0.22);
 }
 
-.nav-btn:hover {
+.nav-btn:hover:not(:disabled) {
   border-color: #8ce6ff;
   transform: translateY(-1px);
-  box-shadow: 0 0 14px rgba(98, 213, 255, 0.38);
+  box-shadow:
+    inset 0 0 12px rgba(109, 223, 255, 0.16),
+    0 0 14px rgba(98, 213, 255, 0.24),
+    0 8px 16px rgba(7, 26, 73, 0.28);
+}
+
+.nav-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.nav-btn.ghost {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 45%),
+    linear-gradient(180deg, #1a437f, #133362);
 }
 
 .panel {
   position: relative;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(8, 40, 102, 0.9), rgba(7, 27, 79, 0.9));
+  border-radius: 12px;
+  border: 1px solid rgba(94, 206, 255, 0.28);
+  background:
+    linear-gradient(180deg, rgba(8, 40, 102, 0.82), rgba(7, 27, 79, 0.88)),
+    radial-gradient(circle at 10% 0%, rgba(86, 170, 255, 0.08), transparent 55%);
   box-shadow:
-    inset 0 0 22px rgba(30, 171, 255, 0.2),
-    0 0 10px rgba(35, 149, 255, 0.2);
-  padding: 12px;
-  backdrop-filter: blur(2px);
+    inset 0 0 22px rgba(30, 171, 255, 0.12),
+    inset 0 -14px 24px rgba(5, 15, 44, 0.24),
+    0 8px 16px rgba(7, 22, 58, 0.2);
+  padding: 14px;
+  backdrop-filter: blur(4px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .panel::after {
   content: "";
   position: absolute;
   inset: 5px;
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  border: 1px solid rgba(106, 212, 255, 0.09);
+  border-radius: 10px;
   pointer-events: none;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-top: 1px solid rgba(117, 224, 255, 0.22);
+  border-right: 1px solid rgba(117, 224, 255, 0.22);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.panel:hover {
+  transform: translateY(-1px);
+  border-color: rgba(124, 224, 255, 0.36);
+  box-shadow:
+    inset 0 0 22px rgba(30, 171, 255, 0.16),
+    0 12px 22px rgba(7, 25, 68, 0.28);
 }
 
 h2 {
@@ -243,276 +504,509 @@ h2 {
   font-size: 16px;
   font-weight: 600;
   color: #9ce9ff;
-  border: 1px solid rgba(96, 206, 255, 0.4);
-  background: linear-gradient(180deg, rgba(28, 85, 170, 0.92), rgba(18, 54, 113, 0.92));
-  border-radius: 6px;
+  border: 1px solid rgba(96, 206, 255, 0.22);
+  background:
+    linear-gradient(90deg, rgba(122, 223, 255, 0.09), rgba(122, 223, 255, 0)),
+    linear-gradient(180deg, rgba(28, 85, 170, 0.76), rgba(18, 54, 113, 0.82));
+  border-radius: 8px;
+  box-shadow: inset 0 0 8px rgba(96, 206, 255, 0.08);
 }
 
 .top-grid {
   margin-top: 10px;
   display: grid;
   gap: 10px;
-  grid-template-columns: 1fr 1.5fr 1fr;
+  grid-template-columns: 1.05fr 1.45fr 1fr;
 }
-
-.pie-wrap {
-  display: grid;
-  place-items: center;
-}
-
-.pie {
-  width: 220px;
-  height: 220px;
-  border-radius: 50%;
-  background: conic-gradient(#5f9dff 0 81%, #ff9d42 81% 92%, #d5ddf4 92% 100%);
-  border: 1px solid rgba(138, 206, 255, 0.45);
-  box-shadow: 0 0 16px rgba(88, 183, 255, 0.3);
-}
-
-.pie-wrap ul {
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-  width: 100%;
-  display: flex;
-  justify-content: space-around;
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-.pie-wrap i {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  display: inline-block;
-  margin-right: 5px;
-}
-
-.c1 { background: #5f9dff; }
-.c2 { background: #ff9d42; }
-.c3 { background: #c6d2f9; }
-
-.fault-row {
-  display: grid;
-  grid-template-columns: 72px 1fr 74px;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 7px;
-  font-size: 13px;
-}
-
-.fault-row span {
-  color: var(--text-dim);
-}
-
-.track {
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(102, 189, 255, 0.2);
-  overflow: hidden;
-}
-
-.track i {
-  height: 100%;
-  display: block;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #7ee4ff, #4a8dff 60%, #ff6f6f);
-}
-
-.fault-row em {
-  font-style: normal;
-  color: #b9f0ff;
-}
-
-.severity-box {
-  margin-top: 12px;
-}
-
-.severity-box h3 {
-  margin: 0 0 8px;
-  display: inline-block;
-  font-size: 14px;
-  font-weight: 600;
-  color: #8ee8ff;
-  border: 1px solid rgba(96, 206, 255, 0.4);
-  background: linear-gradient(180deg, rgba(26, 83, 166, 0.9), rgba(17, 51, 106, 0.9));
-  border-radius: 6px;
-  padding: 4px 10px;
-}
-
-.severity-track {
-  display: flex;
-  height: 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(125, 217, 255, 0.4);
-  overflow: hidden;
-}
-
-.severity-track i:nth-child(1) { background: #22c55e; }
-.severity-track i:nth-child(2) { background: #3b82f6; }
-.severity-track i:nth-child(3) { background: #818cf8; }
-.severity-track i:nth-child(4) { background: #ef4444; }
-
-.severity-text {
-  margin: 12px 0 0;
-  text-align: center;
-  color: #ff8080;
-  font-size: 58px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-shadow: 0 0 18px rgba(255, 94, 94, 0.4);
-}
-
-.device-model {
-  position: relative;
-  height: 290px;
-  display: grid;
-  place-items: center;
-}
-
-.dish {
-  position: absolute;
-  top: 20px;
-  width: 90px;
-  height: 90px;
-  background: linear-gradient(145deg, #53f7ff, #1b9bd9);
-  border: 1px solid rgba(110, 230, 255, 0.45);
-}
-
-.dish.left {
-  left: 55px;
-  border-radius: 12px 75px 65px 26px;
-  transform: rotate(10deg);
-}
-
-.dish.right {
-  right: 55px;
-  border-radius: 75px 12px 26px 65px;
-  transform: rotate(-10deg);
-}
-
-.neck {
-  position: absolute;
-  top: 105px;
-  width: 56px;
-  height: 100px;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #f4f8ff, #8ea0bb);
-}
-
-.base {
-  position: absolute;
-  bottom: 15px;
-  width: 150px;
-  height: 110px;
-  border-radius: 30px 30px 16px 16px;
-  background: linear-gradient(180deg, #f4b3ff, #b277de);
-}
-
-.line {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  height: 2px;
-  background: #ff4b4b;
-  box-shadow: 0 0 10px rgba(255, 84, 84, 0.45);
-}
-
-.l1 { top: 78px; }
-.l2 { top: 126px; }
-.l3 { top: 170px; }
 
 .bottom-grid {
   margin-top: 10px;
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1.5fr 1fr;
 }
 
-.chart svg {
-  width: 100%;
-  height: 200px;
-  filter: drop-shadow(0 0 6px rgba(78, 174, 255, 0.2));
-}
-
-.axis {
-  stroke: rgba(173, 229, 255, 0.55);
-  stroke-width: 1.5;
-}
-
-.b1 { fill: #5384f0; }
-.b2 { fill: #4b89fb; }
-.b3 { fill: #5680ff; }
-.b4 { fill: #4f81ea; }
-
-.pline {
-  fill: none;
-  stroke: #74a5ff;
-  stroke-width: 3;
-}
-
-.mini-bars {
-  margin-top: 8px;
+.gauge-wrap {
   display: grid;
-  gap: 8px;
-}
-
-.mini-row {
-  display: grid;
-  grid-template-columns: 52px 1fr;
-  gap: 6px;
+  grid-template-columns: 180px 1fr;
+  gap: 14px;
   align-items: center;
-  font-size: 12px;
+  min-height: 220px;
 }
 
-.mini-row span {
+.gauge {
+  --pct: 0%;
+  --gauge-color: #44f2a6;
+  position: relative;
+  width: 160px;
+  height: 160px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(4, 18, 50, 0.92) 52%, transparent 53%),
+    conic-gradient(var(--gauge-color) 0 var(--pct), rgba(255, 255, 255, 0.12) var(--pct) 100%);
+  box-shadow:
+    inset 0 0 24px rgba(72, 186, 255, 0.18),
+    inset 0 -18px 18px rgba(4, 15, 44, 0.28),
+    0 0 16px rgba(35, 170, 255, 0.16);
+}
+
+.gauge::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(124, 220, 255, 0.26);
+}
+
+.gauge::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px dashed rgba(119, 225, 255, 0.16);
+}
+
+.gauge-inner {
+  position: absolute;
+  inset: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  background: radial-gradient(circle, rgba(16, 45, 98, 0.88), rgba(5, 20, 58, 0.92));
+  text-align: center;
+}
+
+.gauge-inner strong {
+  font-size: 38px;
+  line-height: 1;
+  color: #dcf8ff;
+  text-shadow: 0 0 10px rgba(105, 223, 255, 0.35);
+}
+
+.gauge-inner span {
+  margin-top: 4px;
+  font-size: 12px;
   color: var(--text-dim);
 }
 
-.multi-track {
-  height: 12px;
-  display: flex;
+.status-block {
+  padding: 10px;
+  border: 1px solid rgba(100, 205, 255, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(10, 31, 82, 0.48), rgba(7, 24, 67, 0.38));
+  box-shadow: inset 0 0 12px rgba(87, 196, 255, 0.06);
+}
+
+.status-title {
+  margin: 0 0 6px;
+  color: #eefbff;
+  font-size: 13px;
+}
+
+.status-text {
+  margin: 0 0 10px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.12);
+}
+
+.status-note {
+  margin: 0;
+  color: #bcefff;
+  font-size: 14px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.metric-card {
+  min-height: 70px;
+  border-radius: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(99, 206, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(8, 32, 76, 0.78), rgba(9, 23, 56, 0.9)),
+    radial-gradient(circle at 0 0, rgba(93, 196, 255, 0.08), transparent 55%);
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  box-shadow: inset 0 0 8px rgba(88, 199, 255, 0.05);
+}
+
+.metric-card label {
+  color: #eefbff;
+  font-size: 12px;
+}
+
+.metric-card strong {
+  font-size: 22px;
+  color: #ddf7ff;
+}
+
+.metric-card strong.ok {
+  color: #44f2a6;
+}
+
+.metric-card strong.warn {
+  color: #ffd75e;
+}
+
+.metric-card strong.danger {
+  color: #ff6a7b;
+}
+
+.fault-bars {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(99, 206, 255, 0.1);
+  background: rgba(5, 20, 56, 0.28);
+}
+
+.fault-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 52px;
+  gap: 8px;
+  align-items: center;
+  color: #cdefff;
+  font-size: 13px;
+}
+
+.fault-row .track {
+  height: 10px;
   border-radius: 999px;
+  border: 1px solid rgba(123, 218, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
   overflow: hidden;
 }
 
-.multi-track i { display: block; height: 100%; }
-.m1 { background: #ff9d3a; }
-.m2 { background: #4e8ffe; }
-.m3 { background: #66adff; }
-.m4 { background: #9e89e9; }
+.fault-row .track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #34d6ff, #4f93ff 45%, #7e66ff);
+  box-shadow:
+    inset 0 0 10px rgba(255, 255, 255, 0.12),
+    0 0 8px rgba(111, 164, 255, 0.2);
+}
 
-.mesh {
+.fault-row em {
+  font-style: normal;
+  color: #97e8ff;
+  text-align: right;
+}
+
+.empty-tip {
+  margin: 6px 0 0;
+  color: #8bbcd0;
+  font-size: 13px;
+}
+
+.distribution {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 14px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(103, 204, 255, 0.1);
+  background: rgba(8, 25, 68, 0.24);
+}
+
+.dist-item {
+  display: grid;
+  grid-template-columns: 20px 1fr 28px;
+  align-items: center;
+  gap: 8px;
+  color: #eefbff;
+}
+
+.dist-track {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(118, 220, 255, 0.12);
+  overflow: hidden;
+}
+
+.dist-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.dist-track i.good {
+  background: linear-gradient(90deg, #2fd4a5, #67ffcd);
+}
+
+.dist-track i.fair {
+  background: linear-gradient(90deg, #ffd365, #ffb34d);
+}
+
+.dist-track i.poor {
+  background: linear-gradient(90deg, #ff5b6b, #ff8fa2);
+}
+
+.dist-item em {
+  font-style: normal;
+  color: #9fe6ff;
+  text-align: right;
+}
+
+.health-legend {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(111, 204, 255, 0.12);
+  background:
+    linear-gradient(180deg, rgba(6, 21, 58, 0.55), rgba(6, 21, 58, 0.38));
+  color: #bfefff;
+  font-size: 13px;
+  box-shadow: inset 0 0 12px rgba(84, 193, 255, 0.06);
+}
+
+.health-legend p {
+  margin: 0;
+}
+
+.health-legend b {
+  color: #fff0a0;
+}
+
+.error-text {
+  color: #ff8f9d;
+}
+
+.chart-panel {
+  min-height: 320px;
+  background:
+    linear-gradient(180deg, rgba(8, 34, 87, 0.82), rgba(7, 23, 65, 0.9)),
+    radial-gradient(circle at 90% 0%, rgba(121, 115, 255, 0.06), transparent 48%);
+}
+
+.trend-panel svg {
+  width: 100%;
+  height: 260px;
+  display: block;
+  padding: 4px;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(6, 21, 57, 0.25), rgba(6, 21, 57, 0.12));
+}
+
+.grid-lines line {
+  stroke: rgba(107, 209, 255, 0.1);
+  stroke-width: 1;
+}
+
+.axis {
+  stroke: rgba(147, 227, 255, 0.28);
+  stroke-width: 1.2;
+}
+
+.score-line {
   fill: none;
-  stroke: rgba(109, 161, 255, 0.45);
+  stroke: #5cd8ff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(92, 216, 255, 0.35));
 }
 
-.shape1 {
-  fill: rgba(104, 72, 245, 0.58);
+.fault-line {
+  fill: none;
+  stroke: #ff7b8b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 4 4;
 }
 
-.shape2 {
-  fill: rgba(67, 215, 255, 0.56);
+.score-dot {
+  fill: #7feaff;
+  stroke: #0a295a;
+  stroke-width: 1.4;
+}
+
+.fault-dot {
+  fill: #ff7f8d;
+  stroke: #401126;
+  stroke-width: 1.2;
+}
+
+.score-label,
+.fault-label,
+.x-label {
+  fill: #bfefff;
+  font-size: 12px;
+  text-anchor: middle;
+}
+
+.fault-label {
+  fill: #ff9cab;
+}
+
+.x-label {
+  fill: #9fdaf0;
+}
+
+.list-panel {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+}
+
+.table-head,
+.table-row {
+  display: grid;
+  grid-template-columns: 1.3fr 0.8fr 0.8fr 0.8fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.table-head {
+  padding: 10px 10px;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(31, 84, 160, 0.24), rgba(18, 53, 112, 0.22));
+  border: 1px solid rgba(103, 204, 255, 0.12);
+  color: #aeeeff;
+  font-size: 13px;
+  box-shadow: inset 0 0 8px rgba(103, 204, 255, 0.06);
+}
+
+.table-body {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  max-height: 248px;
+  overflow: auto;
+  padding-right: 4px;
+  padding-top: 2px;
+}
+
+.table-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.table-body::-webkit-scrollbar-thumb {
+  background: rgba(92, 199, 255, 0.35);
+  border-radius: 999px;
+}
+
+.table-row {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(104, 202, 255, 0.09);
+  background:
+    linear-gradient(180deg, rgba(7, 25, 64, 0.5), rgba(6, 19, 50, 0.42));
+  color: #d0f4ff;
+  font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.table-row:nth-child(2n) {
+  background:
+    linear-gradient(180deg, rgba(8, 28, 72, 0.55), rgba(6, 20, 52, 0.46));
+}
+
+.table-row:hover {
+  transform: translateY(-1px);
+  border-color: rgba(114, 217, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(10, 34, 84, 0.6), rgba(7, 24, 59, 0.52));
+}
+
+.level-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.level-pill.good {
+  color: #64ffc7;
+  border-color: rgba(100, 255, 199, 0.25);
+}
+
+.level-pill.fair {
+  color: #ffe07f;
+  border-color: rgba(255, 224, 127, 0.25);
+}
+
+.level-pill.poor {
+  color: #ff95a3;
+  border-color: rgba(255, 149, 163, 0.25);
+}
+
+.table-empty {
+  padding: 18px 12px;
+  text-align: center;
+  color: #8dbed4;
+  border: 1px dashed rgba(117, 214, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(7, 23, 56, 0.2);
 }
 
 @media (max-width: 1200px) {
-  .top-grid,
+  .top-grid {
+    grid-template-columns: 1fr;
+  }
+
   .bottom-grid {
     grid-template-columns: 1fr;
   }
 
-  .severity-text {
-    font-size: 42px;
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 860px) {
   .screen-header {
     grid-template-columns: 1fr;
   }
 
   .screen-header h1 {
-    font-size: 30px;
+    font-size: 24px;
+    letter-spacing: 2px;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .header-actions .nav-btn {
+    flex: 1;
+  }
+
+  .gauge-wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .fault-row {
+    grid-template-columns: 78px 1fr 44px;
+  }
+
+  .table-head,
+  .table-row {
+    grid-template-columns: 1.3fr 0.7fr 0.7fr 0.7fr;
+    font-size: 12px;
   }
 }
 </style>
