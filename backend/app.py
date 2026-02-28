@@ -34,8 +34,9 @@ def send_item():
     # 获取发送方的实际 IP
     sender_ip = request.remote_addr
     if sender_ip != db.source_ip:
+        msg = "IP 地址不正确，当前IP:" + sender_ip + "，所需IP:" + db.source_ip
         # 不再传输数据
-        return jsonify({"status": "error", "msg": "IP 地址不正确"})
+        return jsonify({"status": "error", "msg": msg})
 
     # 插入数据到数据库
     db.insert_data(data)
@@ -104,15 +105,23 @@ def get_logs():
         "page_size": page_size
     })
 
-# --- 3. 删除操作 ---
-@app.delete("/api/logs/{log_id}")
-async def delete_log(log_id: int):
+# --- 3. 删除操作 (Flask 版本) ---
+@app.route("/api/logs/<int:log_id>", methods=["DELETE"])
+def delete_log(log_id):
     """
     根据 ID 删除单条数据
     """
+    # 执行删除
     db.cursor.execute("DELETE FROM system_logs WHERE id = ?", (log_id,))
+    row_count = db.cursor.rowcount # 获取受影响的行数
     db.conn.commit()
-    return {"message": f"ID {log_id} 已成功删除"}
+    
+    print(f"DEBUG: 删除了 {row_count} 条数据, ID: {log_id}")
+    
+    if row_count == 0:
+        return jsonify({"message": "未找到该 ID 的数据"}), 404
+        
+    return jsonify({"message": f"ID {log_id} 已成功删除", "status": "success"})
 
 # 输出日志文件
 @app.route('/api/export/docx', methods=['GET'])
@@ -167,4 +176,7 @@ def daily_report():
     })
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, port=5000, host='0.0.0.0')
+    # 必须使用 socketio.run
+    # host='0.0.0.0' 确保局域网手机能访问
+    # allow_unsafe_werkzeug=True 是为了在开发环境下强制运行
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
