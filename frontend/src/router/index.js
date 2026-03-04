@@ -8,6 +8,8 @@ import BackendDemoShell from '../views/demo/BackendDemoShell.vue'
 import DemoMonitorView from '../views/demo/MonitorView.vue'
 import DemoSenderView from '../views/demo/SenderView.vue'
 import DemoHealthDashboardView from '../views/demo/HealthDashboard.vue'
+import DemoHealthAlgorithmView from '../views/demo/HealthAlgorithmView.vue'
+import FaultHistoryView from '../views/demo/FaultHistoryView.vue'
 import IPSettingIndustrialView from '../views/IPSettingIndustrialView.vue'
 
 const routes = [
@@ -29,6 +31,16 @@ const routes = [
         path: 'health-dashboard',
         name: 'demo-health-dashboard',
         component: DemoHealthDashboardView
+      },
+      {
+        path: 'health-algorithm',
+        name: 'demo-health-algorithm',
+        component: DemoHealthAlgorithmView
+      },
+      {
+        path: 'fault-history',
+        name: 'demo-fault-history',
+        component: FaultHistoryView
       }
     ]
   }

@@ -12,6 +12,8 @@
         <el-menu-item index="/demo/send">发送模拟数据</el-menu-item>
         <el-menu-item index="/demo/ip">上位机IP设置</el-menu-item>
         <el-menu-item index="/demo/health-dashboard">健康度监控</el-menu-item>
+        <el-menu-item index="/demo/health-algorithm">算法选择与健康分数</el-menu-item>
+        <el-menu-item index="/demo/fault-history">故障历史</el-menu-item>
       </el-menu>
 
       <div class="demo-content">
@@ -22,6 +24,7 @@
     </el-card>
 
     <FaultAlarmListener />
+    <FaultDetailDrawer />
   </div>
 </template>
 
@@ -29,6 +32,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import FaultAlarmListener from './FaultAlarmListener.vue'
+import FaultDetailDrawer from './FaultDetailDrawer.vue'
 
 const route = useRoute()
 const activePath = ref(route.path)
@@ -43,7 +47,7 @@ watch(
 )
 
 const handleMenuSelect = (index) => {
-  if (index === '/demo/health-dashboard') {
+  if (index === '/demo/health-dashboard' || index === '/demo/health-algorithm') {
     setTimeout(() => {
       if (currentPageRef.value && typeof currentPageRef.value.refreshData === 'function') {
         currentPageRef.value.refreshData()

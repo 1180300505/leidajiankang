@@ -86,9 +86,28 @@ class DeviceDB:
             error_message TEXT
         )
         '''
+
+        sql_health = '''
+        CREATE TABLE IF NOT EXISTS health_score_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME NOT NULL,
+            algorithm TEXT NOT NULL,
+            threshold_normal REAL,
+            threshold_mild REAL,
+            overall_score REAL,
+            overall_grade TEXT,
+            turntable_score REAL,
+            turntable_grade TEXT,
+            electrofeed_score REAL,
+            electrofeed_grade TEXT,
+            log_id INTEGER
+        )
+        '''
         
         self.cursor.execute(sql_logs)
         self.cursor.execute(sql_errors)
+        self.cursor.execute(sql_health)
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_health_timestamp_algorithm ON health_score_records(timestamp, algorithm)")
         self.conn.commit()
     
     # --- IP 配置核心逻辑 ---
@@ -203,10 +222,73 @@ class DeviceDB:
         return [dict(zip(keys, row)) for row in rows]
 
     def insert_error(self, timestamp, error_type, error_message):
-        """记录错误信息"""
+        """记录错误信息，返回插入的行 id"""
         sql = "INSERT INTO system_errors (timestamp, error_type, error_message) VALUES (?, ?, ?)"
         self.cursor.execute(sql, (timestamp, error_type, error_message))
         self.conn.commit()
+        return self.cursor.lastrowid
+
+    def query_errors(self, page=1, page_size=10, sort_order="DESC"):
+        """分页查询故障记录。sort_order: DESC(最新在前) 或 ASC"""
+        offset = (page - 1) * page_size
+        order_str = "DESC" if sort_order.upper() == "DESC" else "ASC"
+        sql = f"SELECT id, timestamp, error_type, error_message FROM system_errors ORDER BY id {order_str} LIMIT ? OFFSET ?"
+        self.cursor.execute(sql, (page_size, offset))
+        rows = self.cursor.fetchall()
+        keys = [desc[0] for desc in self.cursor.description]
+        data = [dict(zip(keys, row)) for row in rows]
+        self.cursor.execute("SELECT COUNT(*) FROM system_errors")
+        total = self.cursor.fetchone()[0]
+        return data, total
+
+    def query_error_by_id(self, error_id):
+        """按 id 查询单条故障记录"""
+        self.cursor.execute("SELECT id, timestamp, error_type, error_message FROM system_errors WHERE id = ?", (error_id,))
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        keys = [desc[0] for desc in self.cursor.description]
+        return dict(zip(keys, row))
+
+    def insert_health_record(self, record: dict):
+        """插入健康分数记录（按算法隔离存储）"""
+        sql = """
+        INSERT INTO health_score_records (
+            timestamp, algorithm, threshold_normal, threshold_mild,
+            overall_score, overall_grade, turntable_score, turntable_grade,
+            electrofeed_score, electrofeed_grade, log_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            record.get("timestamp"),
+            record.get("algorithm", "kmeans"),
+            record.get("threshold_normal"),
+            record.get("threshold_mild"),
+            record.get("overall_score"),
+            record.get("overall_grade"),
+            record.get("turntable_score"),
+            record.get("turntable_grade"),
+            record.get("electrofeed_score"),
+            record.get("electrofeed_grade"),
+            record.get("log_id"),
+        )
+        self.cursor.execute(sql, params)
+        self.conn.commit()
+
+    def query_health_records(self, start_time, end_time, algorithm: str):
+        """按时间范围与算法查询健康记录，不同算法数据不混合"""
+        if algorithm not in ("kmeans", "som"):
+            return []
+        sql = """
+        SELECT * FROM health_score_records
+        WHERE datetime(timestamp) BETWEEN datetime(?) AND datetime(?)
+          AND algorithm = ?
+        ORDER BY timestamp ASC
+        """
+        self.cursor.execute(sql, (start_time, end_time, algorithm))
+        rows = self.cursor.fetchall()
+        keys = [desc[0] for desc in self.cursor.description]
+        return [dict(zip(keys, row)) for row in rows]
 
     def calculate_daily_score(self, target_date_str):
         """

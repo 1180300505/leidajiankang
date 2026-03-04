@@ -1,0 +1,8 @@
+flask
+flask-cors
+flask-socketio
+requests
+pandas
+numpy
+minisom>=2.3.0
+python-docx
