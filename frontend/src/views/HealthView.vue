@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <section class="health-screen">
     <button
       v-if="hasActiveAlarm"
@@ -191,10 +191,10 @@ const router = useRouter()
 
 const topLeftTabs = [
   { label: 'IP设置', route: '/demo/ip' },
-  { label: '设备管理' },
+  { label: '数据处理', route: '/health-algorithm' },
   { label: '系统自检' },
   { label: '状态监测' },
-  { label: '数据管理', route: '/realtime' }
+  { label: '健康评估', route: '/alerts' }
 ]
 
 const topRightTabs = [
@@ -211,7 +211,7 @@ const handleTopTabClick = (item) => {
 }
 
 const goAlertsPage = () => {
-  router.push('/alerts')
+  router.push('/fault-history')
 }
 
 const dashboardPayload = ref(null)

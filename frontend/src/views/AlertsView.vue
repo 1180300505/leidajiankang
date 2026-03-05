@@ -2,7 +2,7 @@
   <section class="alert-screen">
     <header class="screen-header">
       <button class="nav-btn" @click="goBack">返回</button>
-      <h1>故障告警</h1>
+      <h1>健康评估</h1>
       <div class="header-actions">
         <button class="nav-btn ghost" :disabled="loading" @click="refreshData">
           {{ loading ? '刷新中...' : '刷新数据' }}

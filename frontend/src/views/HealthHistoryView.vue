@@ -1,126 +1,112 @@
 <template>
   <section class="history-screen">
     <header class="screen-header panel-box">
-      <div class="header-left">数据概览页</div>
-      <h1>健康评估历史查询</h1>
+      <div class="header-left">数据总览页</div>
+      <h1>历史查询</h1>
       <div class="header-right">
-        <span>查询统计</span>
-        <span>排名录入</span>
         <button @click="goHome">返回首页</button>
       </div>
     </header>
 
     <div class="main-layout">
       <aside class="left-menu panel-box">
-        <button
-          v-for="item in leftMenus"
-          :key="item"
-          class="menu-btn"
-          :class="{ 'is-active': activeMenu === item }"
-          @click="selectLeftMenu(item)"
-        >
-          {{ item }}
-        </button>
+        <button class="menu-btn is-active" @click="goHome">主界面</button>
       </aside>
 
       <main class="content">
-        <template v-if="activeMenu === leftMenus[0]">
         <section class="workspace-panel panel-box">
-        <section class="monitor-panel workspace-card">
-          <div class="monitor-header">
-            <div class="monitor-title">设备运行日志监控 (SQLite + Flask)</div>
-            <div class="monitor-actions">
-              <el-button type="primary" @click="fetchData(currentPage)">刷新列表</el-button>
+          <section class="monitor-panel workspace-card">
+            <div class="monitor-header">
+              <div class="monitor-title">设备运行日志监控 (SQLite + Flask)</div>
+              <div class="monitor-actions">
+                <el-button type="primary" @click="fetchData(currentPage)">刷新列表</el-button>
+              </div>
             </div>
-          </div>
 
-          <div class="monitor-toolbar">
-            <el-date-picker
-              v-model="dateRange"
-              type="datetimerange"
-              range-separator="至"
-              start-placeholder="导出开始时间"
-              end-placeholder="导出结束时间"
-              value-format="YYYY-MM-DD HH:mm:ss"
-              :default-time="[new Date(2000, 1, 1, 0, 0, 0), new Date(2000, 1, 1, 23, 59, 59)]"
-            />
-            <el-button type="warning" :icon="Download" @click="handleExport">
-              导出详细 Word 报告
-            </el-button>
-          </div>
+            <div class="monitor-toolbar">
+              <el-date-picker
+                v-model="dateRange"
+                type="datetimerange"
+                range-separator="至"
+                start-placeholder="导出开始时间"
+                end-placeholder="导出结束时间"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                :default-time="[new Date(2000, 1, 1, 0, 0, 0), new Date(2000, 1, 1, 23, 59, 59)]"
+              />
+              <el-select
+                v-model="exportAlgorithm"
+                placeholder="选择健康评估算法"
+                style="width: 180px; margin-left: 10px"
+                clearable
+              >
+                <el-option label="KMeans" value="kmeans" />
+                <el-option label="SOM" value="som" />
+              </el-select>
+              <el-button
+                type="warning"
+                :icon="Download"
+                :loading="exportLoading"
+                @click="handleExport"
+                style="margin-left: 10px"
+              >
+                导出健康评估 Word 报告
+              </el-button>
+            </div>
 
-          <el-table
-            :data="tableData"
-            stripe
-            border
-            v-loading="loading"
-            @sort-change="handleSortChange"
-            class="monitor-table"
-          >
-            <el-table-column prop="id" label="ID" width="70" align="center" />
-            <el-table-column prop="timestamp" label="记录时间" width="180" sortable="custom" />
+            <el-table
+              :data="tableData"
+              stripe
+              border
+              v-loading="loading"
+              @sort-change="handleSortChange"
+              class="monitor-table"
+            >
+              <el-table-column prop="id" label="ID" width="70" align="center" />
+              <el-table-column prop="timestamp" label="记录时间" width="180" sortable="custom" />
 
-            <el-table-column label="系统状态">
-              <el-table-column prop="sys_mode" label="模式" width="90" />
-              <el-table-column prop="sys_lock_status" label="锁定状态" width="100">
+              <el-table-column label="系统状态">
+                <el-table-column prop="sys_mode" label="模式" width="90" />
+                <el-table-column prop="sys_lock_status" label="锁定状态" width="100">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.sys_lock_status === '已锁定' ? 'success' : 'warning'">
+                      {{ scope.row.sys_lock_status }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+              </el-table-column>
+
+              <el-table-column label="电机参数">
+                <el-table-column prop="m1_temp" label="电机1温度" width="110">
+                  <template #default="scope">{{ scope.row.m1_temp }} °C</template>
+                </el-table-column>
+                <el-table-column prop="m2_temp" label="电机2温度" width="110">
+                  <template #default="scope">{{ scope.row.m2_temp }} °C</template>
+                </el-table-column>
+              </el-table-column>
+
+              <el-table-column label="操作" width="100" fixed="right" align="center">
                 <template #default="scope">
-                  <el-tag :type="scope.row.sys_lock_status === '已锁定' ? 'success' : 'warning'">
-                    {{ scope.row.sys_lock_status }}
-                  </el-tag>
+                  <el-popconfirm title="确定删除记录吗？" @confirm="handleDelete(scope.row.id)">
+                    <template #reference>
+                      <el-button type="danger" size="small" link>删除</el-button>
+                    </template>
+                  </el-popconfirm>
                 </template>
               </el-table-column>
-            </el-table-column>
+            </el-table>
 
-            <el-table-column label="电机参数">
-              <el-table-column prop="m1_temp" label="电机1温度" width="110">
-                <template #default="scope">{{ scope.row.m1_temp }} °C</template>
-              </el-table-column>
-              <el-table-column prop="m2_temp" label="电机2温度" width="110">
-                <template #default="scope">{{ scope.row.m2_temp }} °C</template>
-              </el-table-column>
-            </el-table-column>
-
-            <el-table-column label="操作" width="100" fixed="right" align="center">
-              <template #default="scope">
-                <el-popconfirm title="确定要删除这条记录吗？" @confirm="handleDelete(scope.row.id)">
-                  <template #reference>
-                    <el-button type="danger" size="small" link>删除</el-button>
-                  </template>
-                </el-popconfirm>
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <div class="pagination-container">
-            <el-pagination
-              v-model:current-page="currentPage"
-              v-model:page-size="pageSize"
-              :page-sizes="[10, 20, 50, 100]"
-              layout="total, sizes, prev, pager, next, jumper"
-              :total="total"
-              @size-change="handleSizeChange"
-              @current-change="handlePageChange"
-            />
-          </div>
-        </section>
-        </section>
-        </template>
-
-        <section v-else class="placeholder-panel panel-box">
-          <div class="placeholder-header">
-            <h2 class="placeholder-title">{{ activeMenu }}</h2>
-            <span class="placeholder-subtitle">功能预留（右侧界面样式切换示例）</span>
-          </div>
-          <div class="placeholder-body" :data-variant="activeMenu">
-            <div class="placeholder-grid">
-              <div class="placeholder-card wide"></div>
-              <div class="placeholder-card"></div>
-              <div class="placeholder-card"></div>
-              <div class="placeholder-card tall"></div>
-              <div class="placeholder-card"></div>
-              <div class="placeholder-card"></div>
+            <div class="pagination-container">
+              <el-pagination
+                v-model:current-page="currentPage"
+                v-model:page-size="pageSize"
+                :page-sizes="[10, 20, 50, 100]"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="total"
+                @size-change="handleSizeChange"
+                @current-change="handlePageChange"
+              />
             </div>
-          </div>
+          </section>
         </section>
       </main>
     </div>
@@ -128,7 +114,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
@@ -136,16 +122,6 @@ import { Download } from '@element-plus/icons-vue'
 import { API_PREFIX } from '../config/backend'
 
 const router = useRouter()
-const leftMenus = ['主界面', '主表格', '简易数学工具', '复杂数学工具', '切换健康模型', '视图调整工具', '生成对比报告']
-const activeMenu = ref(leftMenus[0])
-
-const goHome = () => {
-  router.push('/health')
-}
-
-const selectLeftMenu = (item) => {
-  activeMenu.value = item
-}
 
 const tableData = ref([])
 const total = ref(0)
@@ -154,16 +130,14 @@ const pageSize = ref(10)
 const loading = ref(false)
 const currentSort = ref('DESC')
 const dateRange = ref([])
+const exportAlgorithm = ref('kmeans')
+const exportLoading = ref(false)
 
 const fetchData = async (page = 1) => {
   loading.value = true
   try {
     const response = await axios.get(`${API_PREFIX}/logs`, {
-      params: {
-        page,
-        page_size: pageSize.value,
-        sort: currentSort.value
-      }
+      params: { page, page_size: pageSize.value, sort: currentSort.value }
     })
     tableData.value = response.data.items || []
     total.value = response.data.total || 0
@@ -174,15 +148,53 @@ const fetchData = async (page = 1) => {
   }
 }
 
-const handleExport = () => {
+const handleExport = async () => {
   if (!dateRange.value || dateRange.value.length < 2) {
-    ElMessage.warning('请先选择需要导出的日期范围')
+    ElMessage.warning('请先选择日期范围')
     return
   }
+
   const [start, end] = dateRange.value
-  const exportUrl = `${API_PREFIX}/export/docx?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
-  window.open(exportUrl, '_blank')
-  ElMessage.success('正在准备报告，请稍候...')
+  const algorithm = exportAlgorithm.value
+  exportLoading.value = true
+
+  try {
+    const response = await axios({
+      url: `${API_PREFIX}/export/docx`,
+      method: 'GET',
+      params: { start, end, algorithm },
+      responseType: 'blob'
+    })
+
+    if (response.data.type === 'application/json') {
+      const text = await response.data.text()
+      const errJson = JSON.parse(text)
+      throw new Error(errJson.error || '导出失败')
+    }
+
+    const blob = new Blob([response.data], {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    })
+
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `Report_${start.slice(0, 10)}_${algorithm || 'default'}.docx`
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+
+    setTimeout(() => {
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    }, 200)
+
+    ElMessage.success('报告导出成功')
+  } catch (err) {
+    ElMessage.error(err.message || '导出失败，请检查网络或后端状态')
+  } finally {
+    exportLoading.value = false
+  }
 }
 
 const handleSortChange = ({ prop, order }) => {
@@ -207,7 +219,7 @@ const handleSizeChange = (val) => {
 const handleDelete = async (id) => {
   try {
     await axios.delete(`${API_PREFIX}/logs/${id}`)
-    ElMessage.success('记录已删除')
+    ElMessage.success('删除成功')
     if (tableData.value.length === 1 && currentPage.value > 1) {
       currentPage.value -= 1
     }
@@ -215,6 +227,10 @@ const handleDelete = async (id) => {
   } catch {
     ElMessage.error('删除失败')
   }
+}
+
+const goHome = () => {
+  router.push('/health')
 }
 
 onMounted(() => {
@@ -336,11 +352,8 @@ onMounted(() => {
 .menu-btn.is-active {
   border-color: #89f0ff;
   color: #effbff;
-  background:
-    linear-gradient(180deg, rgba(53, 120, 228, 0.9), rgba(26, 72, 164, 0.95));
-  box-shadow:
-    inset 0 0 14px rgba(146, 235, 255, 0.16),
-    0 0 16px rgba(91, 220, 255, 0.28);
+  background: linear-gradient(180deg, rgba(53, 120, 228, 0.9), rgba(26, 72, 164, 0.95));
+  box-shadow: inset 0 0 14px rgba(146, 235, 255, 0.16), 0 0 16px rgba(91, 220, 255, 0.28);
 }
 
 .content {
@@ -356,11 +369,9 @@ onMounted(() => {
   position: relative;
   border-radius: 10px;
   border: 1px solid rgba(73, 191, 255, 0.24);
-  background:
-    linear-gradient(180deg, rgba(11, 39, 95, 0.74), rgba(7, 24, 67, 0.82));
-  box-shadow:
-    inset 0 0 16px rgba(76, 171, 255, 0.08),
-    0 0 8px rgba(33, 128, 218, 0.08);
+  background: linear-gradient(180deg, rgba(11, 39, 95, 0.74), rgba(7, 24, 67, 0.82));
+  box-shadow: inset 0 0 16px rgba(76, 171, 255, 0.08), 0 0 8px rgba(33, 128, 218, 0.08);
+  padding: 12px;
 }
 
 .workspace-card::after {
@@ -372,12 +383,7 @@ onMounted(() => {
   pointer-events: none;
 }
 
-.placeholder-panel {
-  min-height: 920px;
-  padding: 16px;
-}
-
-.placeholder-header {
+.monitor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -385,474 +391,46 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
-.placeholder-title {
-  margin: 0;
-  font-size: 20px;
-  color: #b9efff;
-  letter-spacing: 2px;
-}
-
-.placeholder-subtitle {
-  color: #84dfff;
-  font-size: 13px;
-}
-
-.placeholder-body {
-  min-height: 840px;
-  border: 1px solid rgba(88, 193, 255, 0.2);
-  border-radius: 10px;
-  padding: 12px;
-  background:
-    radial-gradient(circle at 20% 20%, rgba(72, 206, 255, 0.12), transparent 40%),
-    linear-gradient(180deg, rgba(7, 28, 74, 0.75), rgba(4, 17, 54, 0.8));
-  box-shadow: inset 0 0 22px rgba(60, 160, 255, 0.14);
-}
-
-.placeholder-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1.4fr 1fr 1fr;
-  grid-auto-rows: 160px;
-}
-
-.placeholder-card {
-  border-radius: 10px;
-  border: 1px solid rgba(98, 198, 255, 0.26);
-  background:
-    linear-gradient(180deg, rgba(11, 45, 109, 0.8), rgba(8, 25, 71, 0.8));
-  box-shadow:
-    inset 0 0 18px rgba(77, 174, 255, 0.12),
-    0 0 10px rgba(32, 124, 214, 0.12);
-}
-
-.placeholder-card.wide {
-  grid-column: 1 / span 2;
-}
-
-.placeholder-card.tall {
-  grid-row: span 2;
-}
-
-.placeholder-body[data-variant='主表格'] .placeholder-card {
-  background:
-    linear-gradient(180deg, rgba(12, 62, 110, 0.8), rgba(9, 36, 77, 0.8));
-}
-
-.placeholder-body[data-variant='简易数学工具'] .placeholder-card {
-  background:
-    linear-gradient(180deg, rgba(25, 78, 118, 0.78), rgba(9, 35, 68, 0.82));
-}
-
-.placeholder-body[data-variant='复杂数学工具'] .placeholder-card {
-  background:
-    linear-gradient(180deg, rgba(40, 72, 132, 0.78), rgba(15, 28, 76, 0.82));
-}
-
-.placeholder-body[data-variant='切换健康模型'] .placeholder-card {
-  background:
-    linear-gradient(180deg, rgba(24, 95, 132, 0.78), rgba(10, 34, 77, 0.82));
-}
-
-.placeholder-body[data-variant='视图调整工具'] .placeholder-card {
-  background:
-    linear-gradient(180deg, rgba(22, 66, 122, 0.78), rgba(8, 25, 68, 0.82));
-}
-
-.placeholder-body[data-variant='生成对比报告'] .placeholder-card {
-  background:
-    linear-gradient(180deg, rgba(44, 76, 136, 0.78), rgba(14, 29, 77, 0.82));
-}
-
-.query-box {
-  padding: 10px;
-}
-
-.query-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: 8px 14px;
-}
-
-.query-grid label {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px;
-  align-items: center;
-  font-size: 14px;
-}
-
-.query-grid input {
-  height: 28px;
-  border: 1px solid #3568a9;
-  background: #3d4f66;
-  color: #e8f7ff;
-  border-radius: 4px;
-}
-
-.query-actions {
-  display: flex;
-  gap: 18px;
-  align-items: center;
-  margin-top: 10px;
-}
-
-.query-actions label {
-  font-size: 14px;
-}
-
-.query-actions button {
-  margin-left: 18px;
-  background: linear-gradient(180deg, #4f80d8, #3e64c1);
-  border: 1px solid #74b6ff;
-  color: #e8f6ff;
-  padding: 8px 20px;
-  font-size: 28px;
-  border-radius: 6px;
-}
-
-.info-row {
-  display: grid;
-  grid-template-columns: 1fr;
-  align-content: start;
-  gap: 8px;
-  padding: 10px;
-  font-size: 13px;
-}
-
-.info-row > div {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(91, 191, 255, 0.14);
-  background: rgba(11, 36, 83, 0.45);
-}
-
-.info-row strong {
-  margin-left: 8px;
-  color: #f8fbff;
-  font-weight: 700;
-}
-
-.chart-wrap {
-  min-height: 560px;
-  display: grid;
-  grid-template-columns: 70px 1fr;
-  gap: 8px;
-  padding: 12px;
-}
-
-.vertical-title {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  font-size: 36px;
-  letter-spacing: 4px;
-  border: 2px solid #4f8bff;
-  display: grid;
-  place-items: center;
-  padding: 8px 0;
-}
-
-.chart-board {
-  position: relative;
-  border: 1px solid rgba(78, 164, 255, 0.3);
-  background: rgba(4, 24, 76, 0.78);
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: inset 0 0 18px rgba(81, 167, 255, 0.16);
-}
-
-.chart-board svg {
-  width: 100%;
-  height: 420px;
-}
-
-.grid line {
-  stroke: rgba(198, 227, 255, 0.35);
-  stroke-width: 1;
-}
-
-.axis-text text {
-  fill: #9bbce7;
-  font-size: 24px;
-}
-
-.line-red,
-.line-cyan,
-.line-orange {
-  fill: none;
-  stroke-width: 3;
-}
-
-.line-red { stroke: #f52b37; }
-.line-cyan { stroke: #9be8ff; }
-.line-orange { stroke: #e39674; }
-
-text {
-  fill: #8796c4;
-  font-size: 26px;
-}
-
-.action-box {
-  position: absolute;
-  right: 24px;
-  bottom: 65px;
-  display: grid;
-  gap: 6px;
-}
-
-.action-box button {
-  border: 2px solid #7cc6c7;
-  background: #dfe9e8;
-  color: #2b7777;
-  font-size: 28px;
-  padding: 6px 20px;
-  border-radius: 6px;
-}
-
-.time-label {
-  position: absolute;
-  right: 16px;
-  bottom: 12px;
-  border: 2px solid #4f8bff;
-  padding: 10px 30px;
-  font-size: 28px;
-}
-
-.monitor-panel {
-  padding: 14px;
-  border: 1px solid rgba(104, 208, 255, 0.22);
-  background:
-    radial-gradient(circle at 96% 0%, rgba(117, 121, 255, 0.06), transparent 42%),
-    linear-gradient(180deg, rgba(10, 38, 94, 0.78), rgba(6, 24, 68, 0.86));
-  box-shadow:
-    inset 0 0 20px rgba(78, 173, 255, 0.08),
-    0 8px 16px rgba(6, 21, 59, 0.18);
-}
-
-.monitor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 10px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid rgba(88, 196, 255, 0.14);
-}
-
 .monitor-title {
-  color: #aeeaff;
-  font-weight: 700;
   font-size: 18px;
-  letter-spacing: 1px;
+  color: #d8f4ff;
 }
 
 .monitor-toolbar {
-  margin-top: 12px;
   display: flex;
-  gap: 10px;
   align-items: center;
+  margin-bottom: 12px;
   flex-wrap: wrap;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(94, 190, 255, 0.16);
-  background: rgba(9, 31, 78, 0.42);
-  box-shadow: inset 0 0 10px rgba(92, 196, 255, 0.05);
+  gap: 8px;
 }
 
 .monitor-table {
-  margin-top: 14px;
-  padding: 8px;
-  border-radius: 10px;
-  border: 1px solid rgba(94, 190, 255, 0.14);
-  background: rgba(7, 25, 66, 0.45);
+  width: 100%;
 }
 
 .pagination-container {
-  margin-top: 14px;
+  margin-top: 12px;
   display: flex;
   justify-content: flex-end;
-  padding: 10px 4px 2px;
-  border-top: 1px solid rgba(88, 196, 255, 0.12);
 }
 
-:deep(.monitor-table .el-table) {
-  --el-table-bg-color: rgba(8, 28, 70, 0.35);
-  --el-table-tr-bg-color: rgba(8, 28, 70, 0.15);
-  --el-table-header-bg-color: rgba(14, 52, 120, 0.72);
-  --el-table-border-color: rgba(86, 187, 255, 0.18);
-  --el-table-row-hover-bg-color: rgba(57, 142, 241, 0.16);
-  --el-table-text-color: #d9f4ff;
-  --el-table-header-text-color: #9fe7ff;
-  --el-fill-color-blank: transparent;
-  background: transparent;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-:deep(.monitor-table .el-table__inner-wrapper::before) {
-  background-color: rgba(86, 187, 255, 0.25);
-}
-
-:deep(.monitor-table .el-table__header-wrapper),
-:deep(.monitor-table .el-table__body-wrapper),
-:deep(.monitor-table .el-table__footer-wrapper),
-:deep(.monitor-table .el-table__fixed),
-:deep(.monitor-table .el-table__fixed-right),
-:deep(.monitor-table .el-table__fixed-body-wrapper),
-:deep(.monitor-table .el-table__fixed-header-wrapper) {
-  background: transparent !important;
-}
-
-:deep(.monitor-table .el-table th.el-table__cell) {
-  background: rgba(14, 52, 120, 0.82) !important;
-  border-bottom-color: rgba(115, 214, 255, 0.22) !important;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  height: 42px;
-}
-
-:deep(.monitor-table .el-table td.el-table__cell),
-:deep(.monitor-table .el-table tr) {
-  background: transparent !important;
-}
-
-:deep(.monitor-table .el-table td.el-table__cell) {
-  border-bottom-color: rgba(86, 187, 255, 0.12) !important;
-  padding-top: 10px;
-  padding-bottom: 10px;
-}
-
-:deep(.monitor-table .el-table__body tr:nth-child(2n) > td.el-table__cell) {
-  background: rgba(255, 255, 255, 0.015) !important;
-}
-
-:deep(.monitor-table .el-table__body tr:hover > td.el-table__cell) {
-  box-shadow: inset 0 0 0 999px rgba(52, 136, 237, 0.08);
-}
-
-:deep(.monitor-table .el-table__expanded-cell) {
-  background: rgba(8, 28, 70, 0.5) !important;
-}
-
-:deep(.monitor-table .el-tag) {
-  border-radius: 999px;
-  font-weight: 600;
-}
-
-:deep(.monitor-table .el-button.is-link) {
-  font-weight: 600;
-}
-
-:deep(.monitor-toolbar .el-input__wrapper),
-:deep(.monitor-toolbar .el-range-editor.el-input__wrapper) {
-  background: rgba(8, 28, 70, 0.9);
-  box-shadow: 0 0 0 1px rgba(83, 192, 255, 0.35) inset;
-}
-
-:deep(.monitor-toolbar .el-input__inner) {
-  color: #d9f4ff;
-}
-
-:deep(.pagination-container .el-pagination) {
-  --el-pagination-text-color: #cfeeff;
-  --el-pagination-button-color: #cfeeff;
-  --el-pagination-button-bg-color: rgba(11, 41, 94, 0.9);
-  --el-pagination-hover-color: #7ee6ff;
-}
-
-:deep(.pagination-container .el-pagination .btn-prev),
-:deep(.pagination-container .el-pagination .btn-next),
-:deep(.pagination-container .el-pagination .el-pager li) {
-  border-radius: 6px;
-  border: 1px solid rgba(98, 199, 255, 0.12);
-}
-
-@media (max-width: 1300px) {
+@media (max-width: 1200px) {
   .main-layout {
     grid-template-columns: 1fr;
   }
 
-  .left-menu {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .query-grid {
-    grid-template-columns: repeat(2, minmax(180px, 1fr));
-  }
-
-  .top-controls {
-    grid-template-columns: 1fr;
-  }
-
-  .monitor-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .placeholder-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .placeholder-card.wide {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 900px) {
   .screen-header {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 10px;
   }
 
   .screen-header h1 {
+    text-align: left;
     font-size: 30px;
   }
 
   .header-right {
     justify-content: flex-start;
-  }
-
-  .left-menu {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .info-row {
-    gap: 6px;
-  }
-
-  .chart-wrap {
-    grid-template-columns: 1fr;
-  }
-
-  .vertical-title {
-    writing-mode: horizontal-tb;
-    font-size: 22px;
-  }
-
-  .workspace-headline {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .placeholder-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .placeholder-grid {
-    grid-template-columns: 1fr;
-    grid-auto-rows: 120px;
-  }
-
-  .placeholder-card.wide {
-    grid-column: auto;
-  }
-
-  .placeholder-card.tall {
-    grid-row: span 1;
   }
 }
 </style>

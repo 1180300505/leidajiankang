@@ -11,6 +11,8 @@ import DemoHealthDashboardView from '../views/demo/HealthDashboard.vue'
 import DemoHealthAlgorithmView from '../views/demo/HealthAlgorithmView.vue'
 import FaultHistoryView from '../views/demo/FaultHistoryView.vue'
 import IPSettingIndustrialView from '../views/IPSettingIndustrialView.vue'
+import HealthAlgorithmCenterView from '../views/HealthAlgorithmCenterView.vue'
+import FaultHistoryCenterView from '../views/FaultHistoryCenterView.vue'
 
 const routes = [
   { path: '/', redirect: '/health' },
@@ -19,6 +21,8 @@ const routes = [
   { path: '/health-history', name: 'health-history', component: HealthHistoryView },
   { path: '/alerts', name: 'alerts', component: AlertsView },
   { path: '/system', name: 'system', component: SystemView },
+  { path: '/health-algorithm', name: 'health-algorithm', component: HealthAlgorithmCenterView },
+  { path: '/fault-history', name: 'fault-history', component: FaultHistoryCenterView },
   {
     path: '/demo',
     component: BackendDemoShell,
