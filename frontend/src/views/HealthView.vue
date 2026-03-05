@@ -49,19 +49,19 @@
           <div class="stats-grid">
             <div class="stat-item">
               <p class="label">健康分数</p>
-              <p class="value accent-pink live-jitter" :style="jitterStyle(1, 1.2)">{{ leftHealthScore }}</p>
+              <p class="value accent-pink">{{ leftHealthScore }}</p>
             </div>
             <div class="stat-item">
               <p class="label">运行时长</p>
-              <p class="value accent-cyan live-jitter" :style="jitterStyle(2, 0.9)">{{ runtimeLabel }}</p>
+              <p class="value accent-cyan">{{ runtimeLabel }}</p>
             </div>
             <div class="stat-item">
               <p class="label">异常次数</p>
-              <p class="value accent-yellow live-jitter" :style="jitterStyle(3, 0.85)">{{ leftAbnormalCount }}</p>
+              <p class="value accent-yellow">{{ leftAbnormalCount }}</p>
             </div>
             <div class="stat-item">
               <p class="label">设备状态</p>
-              <p class="value accent-green live-jitter" :style="jitterStyle(4, 0.8)">{{ systemStatusText }}</p>
+              <p class="value accent-green">{{ systemStatusText }}</p>
             </div>
           </div>
         </article>
@@ -73,12 +73,12 @@
             <span>时间: {{ displayTimestamp }}</span>
           </div>
           <div class="ring-wrap">
-            <div class="ring ring-a" :style="[ringStyles[0], jitterStyle(11, 0.9)]"><span>{{ ringValues[0] }}</span></div>
-            <div class="ring ring-b" :style="[ringStyles[1], jitterStyle(12, 0.9)]"><span>{{ ringValues[1] }}</span></div>
+            <div class="ring ring-a" :style="ringStyles[0]"><span>{{ ringValues[0] }}</span></div>
+            <div class="ring ring-b" :style="ringStyles[1]"><span>{{ ringValues[1] }}</span></div>
           </div>
           <div class="legend-row">
             <span v-for="item in subsystemLegend" :key="item.id">
-              <i class="dot" :class="item.dotClass"></i> {{ item.name }}：{{ item.text }}
+              <i class="dot" :style="{ background: item.color }"></i> {{ item.name }}：{{ item.text }}
             </span>
           </div>
         </article>
@@ -91,10 +91,10 @@
             <span>电流</span>
             <span>状态</span>
           </div>
-          <div v-for="(item, idx) in leftMotors" :key="item.name" class="row-item" :style="jitterStyle(20 + idx, 0.55)">
+          <div v-for="(item, idx) in leftMotors" :key="item.name" class="row-item">
             <span>{{ item.name }}</span>
             <span>{{ item.time }}</span>
-            <span class="live-jitter" :style="jitterStyle(28 + idx, 0.65)">{{ item.current }}</span>
+            <span>{{ item.current }}</span>
             <span class="accent-cyan">{{ item.status }}</span>
           </div>
         </article>
@@ -123,7 +123,7 @@
         </article>
 
         <div class="bottom-grid">
-          <article class="panel-box table-card">
+          <article class="panel-box table-card log-entry" @click="goAlertsPage" title="Open fault history">
             <h2 class="card-title">设备故障日志</h2>
             <div class="row-head">
               <span>状态</span>
@@ -141,13 +141,24 @@
             </div>
           </article>
 
-          <article class="panel-box trend-card">
+          <article class="panel-box trend-card trend-entry" @click="goAlertsTrendPage" title="Open health alerts">
             <h2 class="card-title">设备健康趋势</h2>
             <div class="trend-wrap">
-              <svg viewBox="0 0 420 180" class="trend-svg">
-                <polyline :points="trendPolylines.main" />
-                <polyline :points="trendPolylines.secondary" class="line2" />
-                <polyline :points="trendPolylines.third" class="line3" />
+              <svg viewBox="0 0 680 260" preserveAspectRatio="none" class="trend-svg">
+                <g class="grid-lines">
+                  <line v-for="y in [40, 80, 120, 160, 200]" :key="`g-${y}`" x1="60" :y1="y" x2="650" :y2="y" />
+                </g>
+                <line class="axis" x1="60" y1="220" x2="650" y2="220" />
+                <line class="axis" x1="60" y1="20" x2="60" y2="220" />
+                <polyline v-if="trendScorePolyline" class="score-line" :points="trendScorePolyline" />
+                <polyline v-if="trendFaultPolyline" class="fault-line" :points="trendFaultPolyline" />
+                <g v-for="(p, idx) in trendPlotPoints" :key="`trend-${idx}`">
+                  <circle class="score-dot" :cx="p.x" :cy="p.yScore" r="4" />
+                  <circle class="fault-dot" :cx="p.x" :cy="p.yFault" r="3.5" />
+                  <text class="score-label" :x="p.x" :y="p.yScore - 10">{{ p.score }}</text>
+                  <text class="fault-label" :x="p.x" :y="p.yFault + 16">{{ p.fault_count }}</text>
+                  <text class="x-label" :x="p.x" y="242">{{ shortDate(p.display_date || p.date) }}</text>
+                </g>
               </svg>
             </div>
           </article>
@@ -185,7 +196,9 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 import { createDashboardSocket } from '../socket/dashboardSocket'
+import { API_PREFIX } from '../config/backend'
 
 const router = useRouter()
 
@@ -213,30 +226,20 @@ const handleTopTabClick = (item) => {
 const goAlertsPage = () => {
   router.push('/fault-history')
 }
+const goAlertsTrendPage = () => {
+  router.push('/alerts')
+}
 
 const dashboardPayload = ref(null)
 const lastUpdated = ref('')
-const liveTick = ref(0)
 let dashboardSocket = null
+const faultPreviewRows = ref([])
+const dailyScores = ref([])
 
 const clamp = (value, min = 0, max = 100) => {
   const n = Number(value)
   if (!Number.isFinite(n)) return min
   return Math.min(max, Math.max(min, n))
-}
-
-const jittered = (base, seed = 0, amplitude = 1, min = 0, max = 100) => {
-  const n = Number(base) || 0
-  const wave = Math.sin(liveTick.value * 0.85 + seed * 1.17) * amplitude
-  return clamp(n + wave, min, max)
-}
-
-const jitterStyle = (seed = 0, scale = 1) => {
-  const x = Math.sin(liveTick.value * 0.75 + seed * 1.13) * 1.2 * scale
-  const y = Math.cos(liveTick.value * 0.95 + seed * 0.91) * 0.9 * scale
-  return {
-    transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`
-  }
 }
 
 const formatTime = (date = new Date()) => {
@@ -258,6 +261,7 @@ const statusLevelByCode = (code) => {
   return 0
 }
 
+// 后端 update_dashboard 推送的数据主体，后续显示都从这里取值（接收即显示）
 const dashboardData = computed(() => dashboardPayload.value?.data ?? {})
 const overview = computed(() => dashboardData.value.overview ?? {})
 const health = computed(() => dashboardData.value.health ?? {})
@@ -278,22 +282,24 @@ const signalEntries = computed(() =>
 const historyTrend = computed(() => overview.value.history_trend ?? {})
 const historyTimes = computed(() => (Array.isArray(historyTrend.value.times) ? historyTrend.value.times : []))
 const historyValues = computed(() =>
-  (Array.isArray(historyTrend.value.values) ? historyTrend.value.values : []).map((v) => clamp(v))
+  // 趋势值按后端原始数据展示，不再做抖动或平滑
+  (Array.isArray(historyTrend.value.values) ? historyTrend.value.values : []).map((v) => Number(v) || 0)
 )
 
 const radarData = computed(() => health.value.radar_data ?? {})
 const radarDimensions = computed(() => (Array.isArray(radarData.value.dimensions) ? radarData.value.dimensions : []))
 const radarScores = computed(() =>
-  (Array.isArray(radarData.value.scores) ? radarData.value.scores : []).map((v) => clamp(v))
+  // 雷达分数按后端原始数据展示
+  (Array.isArray(radarData.value.scores) ? radarData.value.scores : []).map((v) => Number(v) || 0)
 )
 
 const displayTimestamp = computed(() => lastUpdated.value || '--')
 const deviceLabel = computed(() => `天线节点${overview.value.system_mode ? `-${overview.value.system_mode}` : ''}`)
-const healthScore = computed(() => Math.round(clamp(health.value.current_score, 0, 999)))
+const healthScore = computed(() => Number(health.value.current_score) || 0)
 const runtimeLabel = computed(() => `${historyValues.value.length || 0}条`)
 const abnormalCount = computed(() => subsystems.value.filter((item) => Number(item.status) !== 1).length)
-const leftHealthScore = computed(() => Math.round(jittered(health.value.current_score, 2, 1.8, 0, 999)))
-const leftAbnormalCount = computed(() => Math.round(jittered(abnormalCount.value, 3, 0.35, 0, 99)))
+const leftHealthScore = computed(() => healthScore.value)
+const leftAbnormalCount = computed(() => abnormalCount.value)
 const systemStatusText = computed(() => {
   const maxLevel = subsystems.value.reduce((max, item) => Math.max(max, statusLevelByCode(item.status)), 0)
   if (maxLevel >= 3) return '告警'
@@ -303,21 +309,52 @@ const systemStatusText = computed(() => {
 })
 
 const ringValues = computed(() => {
-  const values = signalEntries.value.map((item, idx) => Math.round(jittered(item.value, 10 + idx, 1.4)))
-  return [values[0] ?? 0, values[1] ?? 0]
+  // 左侧设备运行状态监测：直接显示后端 health.subsystems 的转台系/电馈系分数
+  const turntableScore = Number(health.value?.subsystems?.turntable?.score) || 0
+  const electrofeedScore = Number(health.value?.subsystems?.electrofeed?.score) || 0
+  return [Math.round(turntableScore), Math.round(electrofeedScore)]
 })
 
+const subsystemScoreColor = (score) => {
+  const n = Number(score) || 0
+  if (n < 60) return '#ff5b6b'
+  if (n > 90) return '#44f2a6'
+  return '#ffd365'
+}
+
+const subsystemScoreLabel = (score) => {
+  const n = Number(score) || 0
+  if (n < 60) return '异常'
+  if (n > 90) return '良好'
+  return '关注'
+}
+
 const ringStyles = computed(() => ([
-  { background: `conic-gradient(#2cecff 0 ${ringValues.value[0]}%, #123a72 ${ringValues.value[0]}% 100%)` },
-  { background: `conic-gradient(#8f6cff 0 ${ringValues.value[1]}%, #123a72 ${ringValues.value[1]}% 100%)` }
+  {
+    background: `conic-gradient(${subsystemScoreColor(ringValues.value[0])} 0 ${clamp(ringValues.value[0], 0, 100)}%, #123a72 ${clamp(ringValues.value[0], 0, 100)}% 100%)`
+  },
+  {
+    background: `conic-gradient(${subsystemScoreColor(ringValues.value[1])} 0 ${clamp(ringValues.value[1], 0, 100)}%, #123a72 ${clamp(ringValues.value[1], 0, 100)}% 100%)`
+  }
 ]))
 
 const subsystemLegend = computed(() =>
-  subsystems.value.slice(0, 3).map((item, index) => ({
-    id: item.id ?? `${item.name}-${index}`,
-    name: item.name || `子系统${index + 1}`,
-    text: statusTextByCode(item.status),
-    dotClass: Number(item.status) === 3 ? 'dot-purple' : Number(item.status) === 2 ? 'dot-cyan' : 'dot-green'
+  [
+    {
+      id: 'turntable',
+      name: '转台系',
+      score: ringValues.value[0],
+      color: subsystemScoreColor(ringValues.value[0])
+    },
+    {
+      id: 'electrofeed',
+      name: '电馈系',
+      score: ringValues.value[1],
+      color: subsystemScoreColor(ringValues.value[1])
+    }
+  ].map((item) => ({
+    ...item,
+    text: `${subsystemScoreLabel(item.score)} / ${Math.round(item.score)}分`
   }))
 )
 
@@ -333,7 +370,8 @@ const motors = computed(() =>
 const leftMotors = computed(() =>
   motors.value.map((item, index) => ({
     ...item,
-    current: `${jittered(signalEntries.value[index]?.value ?? 0, 24 + index, 0.8, 0, 999).toFixed(1)} A`
+    // 电流显示使用接收值
+    current: `${(Number(signalEntries.value[index]?.value) || 0).toFixed(1)} A`
   }))
 )
 
@@ -353,16 +391,24 @@ const feedback = computed(() => {
   return [...signalRows, ...radarRows].slice(0, 6)
 })
 
+const getFaultParts = (row) => {
+  const report = row.fault_report || {}
+  const parts = []
+  if (report.turntable_system) parts.push('转台系统')
+  if (report.geodetic_system) parts.push('大地系统')
+  if (report.motor_1) parts.push('电机1')
+  if (report.motor_2) parts.push('电机2')
+  return parts.length ? parts.join('、') : (report.故障部件 || '--')
+}
+
 const faults = computed(() =>
-  subsystems.value
-    .filter((item) => Number(item.status) > 1)
-    .map((item) => ({
-      status: statusTextByCode(item.status),
-      level: Number(item.status) === 3 ? '3级' : '2级',
-      time: displayTimestamp.value,
-      part: item.name || '未知部位',
-      duration: '--'
-    }))
+  faultPreviewRows.value.map((row) => ({
+    status: row.error_type || '--',
+    level: row.error_type || '--',
+    time: row.timestamp || '--',
+    part: getFaultParts(row),
+    duration: '--'
+  }))
 )
 
 const leftCallouts = computed(() => [
@@ -397,37 +443,41 @@ const rightCallouts = computed(() => [
 
 const heroTitle = computed(() => `${overview.value.system_mode || '--'} 模式 / 天线节点`)
 
-const buildPolyline = (values) => {
-  const safeValues = Array.isArray(values) && values.length ? values : [0, 0, 0, 0, 0, 0, 0]
-  const startX = 20
-  const endX = 380
-  const step = safeValues.length === 1 ? 0 : (endX - startX) / (safeValues.length - 1)
-  return safeValues
-    .map((value, index) => {
-      const x = Math.round(startX + step * index)
-      const y = Math.round(160 - clamp(value) * 1.2)
-      return `${x},${y}`
-    })
-    .join(' ')
-}
+const trendPlotPoints = computed(() => {
+  const list = dailyScores.value.slice(0, 7)
+  if (!list.length) return []
+  const startX = 90
+  const endX = 620
+  const step = list.length === 1 ? 0 : (endX - startX) / (list.length - 1)
+  const maxFault = Math.max(1, ...list.map((item) => Number(item.fault_count) || 0))
 
-const trendPolylines = computed(() => {
-  const main = historyValues.value.length ? historyValues.value : [0, 0, 0, 0, 0, 0, 0]
-  const secondary = main.map((value, index, arr) => {
-    const prev = arr[index - 1] ?? value
-    const next = arr[index + 1] ?? value
-    return Math.round((prev + value + next) / 3)
+  return list.map((item, index) => {
+    const score = clamp(item.score, 0, 100)
+    const fault = clamp(item.fault_count, 0, maxFault)
+    return {
+      ...item,
+      score: Math.round(score),
+      fault_count: Math.round(fault),
+      x: Math.round(startX + step * index),
+      yScore: Math.round(220 - score * 1.9),
+      yFault: Math.round(220 - (fault / maxFault) * 180)
+    }
   })
-  const third = historyTimes.value.length
-    ? historyTimes.value.map((_, index) => Math.round((radarScores.value[index % Math.max(radarScores.value.length, 1)] ?? 0) * 0.8))
-    : main.map(() => Math.round((radarScores.value[0] ?? 0) * 0.8))
-
-  return {
-    main: buildPolyline(main),
-    secondary: buildPolyline(secondary),
-    third: buildPolyline(third)
-  }
 })
+
+const trendScorePolyline = computed(() =>
+  trendPlotPoints.value.length ? trendPlotPoints.value.map((p) => `${p.x},${p.yScore}`).join(' ') : ''
+)
+
+const trendFaultPolyline = computed(() =>
+  trendPlotPoints.value.length ? trendPlotPoints.value.map((p) => `${p.x},${p.yFault}`).join(' ') : ''
+)
+
+const shortDate = (value) => {
+  if (!value) return '--'
+  const s = String(value)
+  return s.includes('-') ? s.slice(5) : s
+}
 
 const alarmInfo = computed(() => {
   const firstAbnormal = subsystems.value.find((item) => Number(item.status) > 1)
@@ -460,14 +510,41 @@ const alarmBannerText = computed(() => {
   return `一般故障：${abnormalCount.value} 项异常，点击查看`
 })
 
+const fetchFaultPreview = async () => {
+  try {
+    const res = await axios.get(`${API_PREFIX}/errors`, {
+      params: { page: 1, page_size: 5, sort: 'DESC' }
+    })
+    faultPreviewRows.value = res.data?.items || []
+  } catch (error) {
+    faultPreviewRows.value = []
+    console.error('fetchFaultPreview failed', error)
+  }
+}
+
+const fetchHealthTrend = async () => {
+  try {
+    const res = await axios.get(`${API_PREFIX}/health/daily-report`)
+    dailyScores.value = Array.isArray(res.data?.data) ? res.data.data : []
+  } catch (error) {
+    dailyScores.value = []
+    console.error('fetchHealthTrend failed', error)
+  }
+}
+
 onMounted(() => {
   dashboardSocket = createDashboardSocket({
     onDashboardUpdate: (payload) => {
+      // 接收到后端 JSON 后直接更新页面数据
       dashboardPayload.value = payload
       lastUpdated.value = formatTime()
-      liveTick.value += 1
+      // 每次后端推送后刷新故障预览，确保与 fault-history 首页数据顺序一致
+      fetchFaultPreview()
     }
   })
+  fetchFaultPreview()
+  // 健康趋势图使用 alerts 页面同源数据
+  fetchHealthTrend()
 })
 
 onUnmounted(() => {
@@ -912,6 +989,32 @@ onUnmounted(() => {
   padding: 12px;
 }
 
+.log-entry {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.log-entry:hover {
+  transform: translateY(-1px);
+  border-color: rgba(106, 229, 255, 0.92);
+  box-shadow:
+    inset 0 0 22px rgba(0, 180, 255, 0.24),
+    0 0 14px rgba(45, 189, 255, 0.35);
+}
+
+.trend-entry {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.trend-entry:hover {
+  transform: translateY(-1px);
+  border-color: rgba(106, 229, 255, 0.92);
+  box-shadow:
+    inset 0 0 22px rgba(0, 180, 255, 0.24),
+    0 0 14px rgba(45, 189, 255, 0.35);
+}
+
 .row-head,
 .row-item {
   display: grid;
@@ -950,20 +1053,66 @@ onUnmounted(() => {
 .trend-svg {
   width: 100%;
   height: 180px;
+  display: block;
+  padding: 4px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(6, 21, 57, 0.25), rgba(6, 21, 57, 0.12));
 }
 
-.trend-svg polyline {
+.grid-lines line {
+  stroke: rgba(107, 209, 255, 0.1);
+  stroke-width: 1;
+}
+
+.axis {
+  stroke: rgba(147, 227, 255, 0.28);
+  stroke-width: 1.2;
+}
+
+.score-line {
   fill: none;
-  stroke: #ffb67b;
+  stroke: #5cd8ff;
   stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(92, 216, 255, 0.35));
 }
 
-.trend-svg .line2 {
-  stroke: #59d9ff;
+.fault-line {
+  fill: none;
+  stroke: #ff7b8b;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 4 4;
 }
 
-.trend-svg .line3 {
-  stroke: #fff4ad;
+.score-dot {
+  fill: #7feaff;
+  stroke: #0a295a;
+  stroke-width: 1.4;
+}
+
+.fault-dot {
+  fill: #ff7f8d;
+  stroke: #401126;
+  stroke-width: 1.2;
+}
+
+.score-label,
+.fault-label,
+.x-label {
+  fill: #bfefff;
+  font-size: 12px;
+  text-anchor: middle;
+}
+
+.fault-label {
+  fill: #ff9cab;
+}
+
+.x-label {
+  fill: #9fdaf0;
 }
 
 .alarm-card {
