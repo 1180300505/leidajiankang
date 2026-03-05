@@ -49,19 +49,19 @@
           <div class="stats-grid">
             <div class="stat-item">
               <p class="label">健康分数</p>
-              <p class="value accent-pink">{{ healthScore }}</p>
+              <p class="value accent-pink live-jitter" :style="jitterStyle(1, 1.2)">{{ leftHealthScore }}</p>
             </div>
             <div class="stat-item">
               <p class="label">运行时长</p>
-              <p class="value accent-cyan">{{ runtimeLabel }}</p>
+              <p class="value accent-cyan live-jitter" :style="jitterStyle(2, 0.9)">{{ runtimeLabel }}</p>
             </div>
             <div class="stat-item">
               <p class="label">异常次数</p>
-              <p class="value accent-yellow">{{ abnormalCount }}</p>
+              <p class="value accent-yellow live-jitter" :style="jitterStyle(3, 0.85)">{{ leftAbnormalCount }}</p>
             </div>
             <div class="stat-item">
               <p class="label">设备状态</p>
-              <p class="value accent-green">{{ systemStatusText }}</p>
+              <p class="value accent-green live-jitter" :style="jitterStyle(4, 0.8)">{{ systemStatusText }}</p>
             </div>
           </div>
         </article>
@@ -73,8 +73,8 @@
             <span>时间: {{ displayTimestamp }}</span>
           </div>
           <div class="ring-wrap">
-            <div class="ring ring-a" :style="ringStyles[0]"><span>{{ ringValues[0] }}</span></div>
-            <div class="ring ring-b" :style="ringStyles[1]"><span>{{ ringValues[1] }}</span></div>
+            <div class="ring ring-a" :style="[ringStyles[0], jitterStyle(11, 0.9)]"><span>{{ ringValues[0] }}</span></div>
+            <div class="ring ring-b" :style="[ringStyles[1], jitterStyle(12, 0.9)]"><span>{{ ringValues[1] }}</span></div>
           </div>
           <div class="legend-row">
             <span v-for="item in subsystemLegend" :key="item.id">
@@ -91,10 +91,10 @@
             <span>电流</span>
             <span>状态</span>
           </div>
-          <div v-for="item in motors" :key="item.name" class="row-item">
+          <div v-for="(item, idx) in leftMotors" :key="item.name" class="row-item" :style="jitterStyle(20 + idx, 0.55)">
             <span>{{ item.name }}</span>
             <span>{{ item.time }}</span>
-            <span>{{ item.current }}</span>
+            <span class="live-jitter" :style="jitterStyle(28 + idx, 0.65)">{{ item.current }}</span>
             <span class="accent-cyan">{{ item.status }}</span>
           </div>
         </article>
@@ -216,12 +216,27 @@ const goAlertsPage = () => {
 
 const dashboardPayload = ref(null)
 const lastUpdated = ref('')
+const liveTick = ref(0)
 let dashboardSocket = null
 
 const clamp = (value, min = 0, max = 100) => {
   const n = Number(value)
   if (!Number.isFinite(n)) return min
   return Math.min(max, Math.max(min, n))
+}
+
+const jittered = (base, seed = 0, amplitude = 1, min = 0, max = 100) => {
+  const n = Number(base) || 0
+  const wave = Math.sin(liveTick.value * 0.85 + seed * 1.17) * amplitude
+  return clamp(n + wave, min, max)
+}
+
+const jitterStyle = (seed = 0, scale = 1) => {
+  const x = Math.sin(liveTick.value * 0.75 + seed * 1.13) * 1.2 * scale
+  const y = Math.cos(liveTick.value * 0.95 + seed * 0.91) * 0.9 * scale
+  return {
+    transform: `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`
+  }
 }
 
 const formatTime = (date = new Date()) => {
@@ -277,6 +292,8 @@ const deviceLabel = computed(() => `天线节点${overview.value.system_mode ? `
 const healthScore = computed(() => Math.round(clamp(health.value.current_score, 0, 999)))
 const runtimeLabel = computed(() => `${historyValues.value.length || 0}条`)
 const abnormalCount = computed(() => subsystems.value.filter((item) => Number(item.status) !== 1).length)
+const leftHealthScore = computed(() => Math.round(jittered(health.value.current_score, 2, 1.8, 0, 999)))
+const leftAbnormalCount = computed(() => Math.round(jittered(abnormalCount.value, 3, 0.35, 0, 99)))
 const systemStatusText = computed(() => {
   const maxLevel = subsystems.value.reduce((max, item) => Math.max(max, statusLevelByCode(item.status)), 0)
   if (maxLevel >= 3) return '告警'
@@ -286,7 +303,7 @@ const systemStatusText = computed(() => {
 })
 
 const ringValues = computed(() => {
-  const values = signalEntries.value.map((item) => Math.round(clamp(item.value)))
+  const values = signalEntries.value.map((item, idx) => Math.round(jittered(item.value, 10 + idx, 1.4)))
   return [values[0] ?? 0, values[1] ?? 0]
 })
 
@@ -310,6 +327,13 @@ const motors = computed(() =>
     time: displayTimestamp.value,
     current: `${(signalEntries.value[index]?.value ?? 0).toFixed(1)} A`,
     status: statusTextByCode(item.status)
+  }))
+)
+
+const leftMotors = computed(() =>
+  motors.value.map((item, index) => ({
+    ...item,
+    current: `${jittered(signalEntries.value[index]?.value ?? 0, 24 + index, 0.8, 0, 999).toFixed(1)} A`
   }))
 )
 
@@ -441,6 +465,7 @@ onMounted(() => {
     onDashboardUpdate: (payload) => {
       dashboardPayload.value = payload
       lastUpdated.value = formatTime()
+      liveTick.value += 1
     }
   })
 })
@@ -636,6 +661,12 @@ onUnmounted(() => {
   margin: 0;
   font-size: 15px;
   color: #9be9ff;
+}
+
+.live-jitter {
+  display: inline-block;
+  will-change: transform;
+  transition: transform 0.16s linear;
 }
 
 .meta-row {
