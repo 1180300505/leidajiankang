@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import RealtimeView from '../views/RealtimeView.vue'
 import HealthView from '../views/HealthView.vue'
 import HealthHistoryView from '../views/HealthHistoryView.vue'
@@ -50,8 +50,10 @@ const routes = [
   }
 ]
 
+const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:'
+
 const router = createRouter({
-  history: createWebHistory(),
+  history: isFileProtocol ? createWebHashHistory() : createWebHistory(),
   routes
 })
 

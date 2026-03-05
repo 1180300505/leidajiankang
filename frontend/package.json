@@ -2,11 +2,14 @@
   "name": "leidajiankang-frontend",
   "private": true,
   "version": "0.1.0",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop:dev": "cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "desktop:build": "npm run build && cross-env ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ electron-builder --win portable --config.win.signAndEditExecutable=false"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
@@ -18,6 +21,34 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
-    "vite": "^6.2.0"
+    "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "vite": "^6.2.0",
+    "wait-on": "^8.0.4"
+  },
+  "build": {
+    "appId": "com.leidajiankang.desktop",
+    "productName": "LeidaJiankang",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    }
   }
 }
