@@ -191,7 +191,7 @@ const router = useRouter()
 
 const topLeftTabs = [
   { label: 'IP设置', route: '/demo/ip' },
-  { label: '数据处理', route: '/health-algorithm' },
+  { label: '算法管理', route: '/health-algorithm' },
   { label: '系统自检' },
   { label: '状态监测' },
   { label: '健康评估', route: '/alerts' }

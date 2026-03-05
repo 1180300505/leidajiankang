@@ -22,6 +22,57 @@ _health_threshold_normal = 90   # 分数>=此值为正常
 _health_threshold_mild = 70     # 分数>=此值为轻度异常，否则重度异常
 
 
+def _to_num(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _norm_score(value, center=0.0, scale=1.0):
+    ratio = abs(_to_num(value) - center) / max(scale, 1e-6)
+    return max(0.0, min(100.0, 100.0 - ratio * 100.0))
+
+
+def _build_subsystem_radar(data: dict, tt_score: float, ef_score: float):
+    tracking = data.get("tracking_data", {})
+    tt = tracking.get("turntable_system", {})
+    geo = tracking.get("geodetic_system", {})
+    sig = data.get("signal_params", {})
+    motors = data.get("motor_diagnostics", {})
+    m1 = motors.get("motor_1", {})
+    m2 = motors.get("motor_2", {})
+
+    turntable_values = [
+        _norm_score(tt.get("deviation_azimuth"), 0.0, 5.0),
+        _norm_score(tt.get("deviation_pitch"), 0.0, 3.0),
+        _norm_score(tt.get("deviation_tilt"), 0.0, 3.0),
+        _norm_score(geo.get("deviation_azimuth"), 0.0, 5.0),
+        _norm_score(geo.get("deviation_pitch"), 0.0, 3.0),
+    ]
+    electrofeed_values = [
+        _norm_score(sig.get("agc_voltage"), 2.5, 1.5),
+        _norm_score(sig.get("azimuth_error_voltage"), 0.0, 1.0),
+        _norm_score(sig.get("pitch_error_voltage"), 0.0, 1.0),
+        _norm_score(m1.get("temp"), 55.0, 35.0),
+        _norm_score(m2.get("temp"), 55.0, 35.0),
+    ]
+
+    turntable_values = [round((v * 0.45 + tt_score * 0.55), 1) for v in turntable_values]
+    electrofeed_values = [round((v * 0.45 + ef_score * 0.55), 1) for v in electrofeed_values]
+
+    return {
+        "turntable": {
+            "labels": ["方位偏差", "俯仰偏差", "倾斜偏差", "大地偏差", "稳定性"],
+            "values": turntable_values,
+        },
+        "electrofeed": {
+            "labels": ["AGC电压", "方位误差电压", "俯仰误差电压", "电机1温度", "电机2温度"],
+            "values": electrofeed_values,
+        },
+    }
+
+
 def _get_health_service() -> HealthService:
     global _health_service, _health_algorithm, _health_threshold_normal, _health_threshold_mild
     if _health_service is None:
@@ -91,6 +142,7 @@ def send_item():
     overall_score = round(health_result.get("overall_score", 95))
     tt_score = round(health_result.get("turntable_score", 95))
     ef_score = round(health_result.get("electrofeed_score", 95))
+    subsystem_radar = _build_subsystem_radar(data, tt_score, ef_score)
 
     dashboard_json = {
         "code": 200,
@@ -118,7 +170,8 @@ def send_item():
                 "radar_data": {
                     "dimensions": ["转台系", "电馈系"],
                     "scores": [tt_score, ef_score]
-                }
+                },
+                "subsystem_radar": subsystem_radar
             }
         }
     }

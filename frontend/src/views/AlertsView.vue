@@ -142,14 +142,131 @@
         </div>
       </article>
     </div>
+
+    <div class="radar-grid">
+      <article class="panel radar-panel">
+        <div class="radar-head">
+          <h2>转台系子系统状态</h2>
+          <span class="radar-score" :style="{ color: radarColor(turntableSubsystemScore) }">
+            {{ turntableSubsystemScore }}
+          </span>
+        </div>
+        <div class="radar-wrap">
+          <svg viewBox="0 0 260 220" class="radar-svg">
+            <g>
+              <polygon v-for="(mesh, idx) in radarMeshes" :key="`tt-mesh-${idx}`" :points="mesh" class="radar-mesh" />
+              <line
+                v-for="(p, idx) in radarAxisPoints"
+                :key="`tt-axis-${idx}`"
+                :x1="radarCenter.x"
+                :y1="radarCenter.y"
+                :x2="p.x"
+                :y2="p.y"
+                class="radar-axis"
+              />
+              <polygon
+                :points="turntableRadarPoints"
+                class="radar-shape jitter"
+                :style="{ '--shape-color': radarColor(turntableSubsystemScore) }"
+              />
+              <circle
+                v-for="(p, idx) in turntableRadarDots"
+                :key="`tt-dot-${idx}`"
+                :cx="p.x"
+                :cy="p.y"
+                r="3"
+                class="radar-dot"
+                :style="{ '--shape-color': radarColor(turntableSubsystemScore) }"
+              />
+            </g>
+            <text
+              v-for="(p, idx) in radarAxisPoints"
+              :key="`tt-label-${idx}`"
+              :x="p.labelX"
+              :y="p.labelY"
+              class="radar-label"
+            >
+              {{ turntableRadarLabels[idx] || `维度${idx + 1}` }}
+            </text>
+            <text
+              v-for="(value, idx) in turntableRadarValuesDisplay"
+              :key="`tt-value-${idx}`"
+              :x="turntableRadarDots[idx].x"
+              :y="turntableRadarDots[idx].y - 8"
+              class="radar-value"
+            >
+              {{ value }}
+            </text>
+          </svg>
+        </div>
+      </article>
+
+      <article class="panel radar-panel">
+        <div class="radar-head">
+          <h2>电馈系子系统状态</h2>
+          <span class="radar-score" :style="{ color: radarColor(electrofeedSubsystemScore) }">
+            {{ electrofeedSubsystemScore }}
+          </span>
+        </div>
+        <div class="radar-wrap">
+          <svg viewBox="0 0 260 220" class="radar-svg">
+            <g>
+              <polygon v-for="(mesh, idx) in radarMeshes" :key="`ef-mesh-${idx}`" :points="mesh" class="radar-mesh" />
+              <line
+                v-for="(p, idx) in radarAxisPoints"
+                :key="`ef-axis-${idx}`"
+                :x1="radarCenter.x"
+                :y1="radarCenter.y"
+                :x2="p.x"
+                :y2="p.y"
+                class="radar-axis"
+              />
+              <polygon
+                :points="electrofeedRadarPoints"
+                class="radar-shape jitter"
+                :style="{ '--shape-color': radarColor(electrofeedSubsystemScore) }"
+              />
+              <circle
+                v-for="(p, idx) in electrofeedRadarDots"
+                :key="`ef-dot-${idx}`"
+                :cx="p.x"
+                :cy="p.y"
+                r="3"
+                class="radar-dot"
+                :style="{ '--shape-color': radarColor(electrofeedSubsystemScore) }"
+              />
+            </g>
+            <text
+              v-for="(p, idx) in radarAxisPoints"
+              :key="`ef-label-${idx}`"
+              :x="p.labelX"
+              :y="p.labelY"
+              class="radar-label"
+            >
+              {{ electrofeedRadarLabels[idx] || `维度${idx + 1}` }}
+            </text>
+            <text
+              v-for="(value, idx) in electrofeedRadarValuesDisplay"
+              :key="`ef-value-${idx}`"
+              :x="electrofeedRadarDots[idx].x"
+              :y="electrofeedRadarDots[idx].y - 8"
+              class="radar-value"
+            >
+              {{ value }}
+            </text>
+          </svg>
+        </div>
+      </article>
+    </div>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { API_PREFIX } from '../config/backend'
+import { createDashboardSocket } from '../socket/dashboardSocket'
 
 const router = useRouter()
 
@@ -157,6 +274,9 @@ const dailyScores = ref([])
 const summary = ref({ today_score: 100, average_score: 100 })
 const loading = ref(false)
 const errorMessage = ref('')
+const dashboardPayload = ref(null)
+const radarShakeTick = ref(0)
+let dashboardSocket = null
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0))
 
@@ -282,6 +402,105 @@ const shortDate = (value) => {
   return s.includes('-') ? s.slice(5) : s
 }
 
+const radarColor = (score) => {
+  const n = Number(score) || 0
+  if (n < 60) return '#ff5d6f'
+  if (n > 90) return '#46f2ad'
+  return '#ffd45f'
+}
+
+const radarCenter = { x: 130, y: 108 }
+const radarRadius = 74
+const radarAngles = [-90, -18, 54, 126, 198]
+const toRad = (deg) => (deg * Math.PI) / 180
+const pointByAngle = (deg, radius) => {
+  const rad = toRad(deg)
+  return {
+    x: radarCenter.x + Math.cos(rad) * radius,
+    y: radarCenter.y + Math.sin(rad) * radius
+  }
+}
+
+const radarAxisPoints = radarAngles.map((deg) => {
+  const p = pointByAngle(deg, radarRadius)
+  const labelP = pointByAngle(deg, radarRadius + 18)
+  return {
+    x: Number(p.x.toFixed(2)),
+    y: Number(p.y.toFixed(2)),
+    labelX: Number(labelP.x.toFixed(2)),
+    labelY: Number(labelP.y.toFixed(2))
+  }
+})
+
+const radarMeshes = [1, 0.75, 0.5, 0.25].map((ratio) =>
+  radarAngles
+    .map((deg) => {
+      const p = pointByAngle(deg, radarRadius * ratio)
+      return `${p.x.toFixed(2)},${p.y.toFixed(2)}`
+    })
+    .join(' ')
+)
+
+const healthLive = computed(() => dashboardPayload.value?.data?.health ?? {})
+const subsystemRadar = computed(() => healthLive.value.subsystem_radar ?? {})
+
+const turntableSubsystemScore = computed(() =>
+  Math.round(clamp(healthLive.value?.subsystems?.turntable?.score ?? 0, 0, 100))
+)
+const electrofeedSubsystemScore = computed(() =>
+  Math.round(clamp(healthLive.value?.subsystems?.electrofeed?.score ?? 0, 0, 100))
+)
+
+const normalizeFiveValues = (values, fallbackScore) => {
+  const base = Array.isArray(values) ? values.map((v) => clamp(v, 0, 100)) : []
+  if (base.length >= 5) return base.slice(0, 5)
+  const fill = clamp(fallbackScore, 0, 100)
+  return [...base, ...Array.from({ length: 5 - base.length }, () => fill)]
+}
+
+const withShake = (values) =>
+  values.map((v, idx) => clamp(v + Math.sin(radarShakeTick.value * 0.9 + idx * 1.3) * 1.4, 0, 100))
+
+const turntableRadarLabels = computed(() => {
+  const labels = subsystemRadar.value?.turntable?.labels
+  return Array.isArray(labels) && labels.length ? labels.slice(0, 5) : ['维度1', '维度2', '维度3', '维度4', '维度5']
+})
+const electrofeedRadarLabels = computed(() => {
+  const labels = subsystemRadar.value?.electrofeed?.labels
+  return Array.isArray(labels) && labels.length ? labels.slice(0, 5) : ['维度1', '维度2', '维度3', '维度4', '维度5']
+})
+
+const turntableRadarValues = computed(() =>
+  withShake(
+    normalizeFiveValues(
+      subsystemRadar.value?.turntable?.values,
+      turntableSubsystemScore.value || safeTodayScore.value
+    )
+  )
+)
+const electrofeedRadarValues = computed(() =>
+  withShake(
+    normalizeFiveValues(
+      subsystemRadar.value?.electrofeed?.values,
+      electrofeedSubsystemScore.value || safeTodayScore.value
+    )
+  )
+)
+
+const buildRadarDots = (values) =>
+  radarAngles.map((deg, idx) => {
+    const rate = clamp(values[idx], 0, 100) / 100
+    const p = pointByAngle(deg, radarRadius * rate)
+    return { x: Number(p.x.toFixed(2)), y: Number(p.y.toFixed(2)) }
+  })
+
+const turntableRadarDots = computed(() => buildRadarDots(turntableRadarValues.value))
+const electrofeedRadarDots = computed(() => buildRadarDots(electrofeedRadarValues.value))
+const turntableRadarPoints = computed(() => turntableRadarDots.value.map((p) => `${p.x},${p.y}`).join(' '))
+const electrofeedRadarPoints = computed(() => electrofeedRadarDots.value.map((p) => `${p.x},${p.y}`).join(' '))
+const turntableRadarValuesDisplay = computed(() => turntableRadarValues.value.map((v) => Math.round(v)))
+const electrofeedRadarValuesDisplay = computed(() => electrofeedRadarValues.value.map((v) => Math.round(v)))
+
 const refreshData = async () => {
   loading.value = true
   errorMessage.value = ''
@@ -297,11 +516,30 @@ const refreshData = async () => {
   }
 }
 
+const connectDashboard = () => {
+  dashboardSocket = createDashboardSocket({
+    onDashboardUpdate: (payload) => {
+      dashboardPayload.value = payload
+      radarShakeTick.value += 1
+    }
+  })
+}
+
 const goBack = () => {
   router.push('/health')
 }
 
-onMounted(refreshData)
+onMounted(() => {
+  refreshData()
+  connectDashboard()
+})
+
+onUnmounted(() => {
+  if (dashboardSocket) {
+    dashboardSocket.disconnect()
+    dashboardSocket = null
+  }
+})
 </script>
 
 <style scoped>
@@ -787,6 +1025,100 @@ h2 {
   color: #ff8f9d;
 }
 
+.radar-grid {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.radar-panel {
+  min-height: 280px;
+  padding: 10px;
+  background:
+    linear-gradient(180deg, rgba(8, 34, 87, 0.82), rgba(7, 23, 65, 0.9)),
+    radial-gradient(circle at 20% 0%, rgba(98, 146, 255, 0.15), transparent 55%);
+}
+
+.radar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.radar-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.radar-score {
+  font-size: 28px;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(122, 233, 255, 0.35);
+}
+
+.radar-wrap {
+  height: 230px;
+  display: grid;
+  place-items: center;
+}
+
+.radar-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.radar-mesh {
+  fill: rgba(67, 157, 255, 0.05);
+  stroke: rgba(121, 216, 255, 0.3);
+  stroke-width: 1;
+}
+
+.radar-axis {
+  stroke: rgba(130, 225, 255, 0.26);
+  stroke-width: 1;
+}
+
+.radar-shape {
+  fill: color-mix(in srgb, var(--shape-color) 30%, transparent);
+  stroke: var(--shape-color);
+  stroke-width: 2.2;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--shape-color) 55%, transparent));
+  transition: all 0.25s ease-out;
+}
+
+.radar-dot {
+  fill: var(--shape-color);
+  stroke: rgba(8, 25, 64, 0.9);
+  stroke-width: 1.2;
+}
+
+.radar-label {
+  fill: #c5f2ff;
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.radar-value {
+  fill: #e7fbff;
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+.jitter {
+  animation: radar-jitter 0.35s ease-in-out infinite alternate;
+}
+
+@keyframes radar-jitter {
+  0% {
+    transform: translate(0px, 0px);
+  }
+  100% {
+    transform: translate(0.8px, -0.8px);
+  }
+}
+
 .chart-panel {
   min-height: 320px;
   background:
@@ -968,6 +1300,10 @@ h2 {
   }
 
   .bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .radar-grid {
     grid-template-columns: 1fr;
   }
 
