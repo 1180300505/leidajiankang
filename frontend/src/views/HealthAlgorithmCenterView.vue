@@ -7,7 +7,7 @@
       </div>
       <div class="header-actions">
         <el-button class="action-btn ghost" @click="goBack">返回健康页</el-button>
-        <el-button class="action-btn" :loading="retrainLoading" @click="handleRetrain">重训模型</el-button>
+        <el-button class="action-btn ghost" :loading="retrainLoading" @click="handleRetrain">重训模型</el-button>
       </div>
     </header>
 

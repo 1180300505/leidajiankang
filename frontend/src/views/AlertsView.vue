@@ -617,7 +617,7 @@ onUnmounted(() => {
     linear-gradient(180deg, #143e8a, #102f6f);
   border: 1px solid rgba(88, 212, 255, 0.32);
   border-radius: 10px;
-  color: #ff777e;
+  color: #ffffff;
   font-size: 34px;
   letter-spacing: 4px;
   padding: 12px 0;

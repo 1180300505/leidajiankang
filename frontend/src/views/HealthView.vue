@@ -296,7 +296,7 @@ const radarScores = computed(() =>
 const displayTimestamp = computed(() => lastUpdated.value || '--')
 const deviceLabel = computed(() => `天线节点${overview.value.system_mode ? `-${overview.value.system_mode}` : ''}`)
 const healthScore = computed(() => Number(health.value.current_score) || 0)
-const runtimeLabel = computed(() => `${historyValues.value.length || 0}条`)
+const runtimeLabel = computed(() => `${historyValues.value.length || 0}天`)
 const abnormalCount = computed(() => subsystems.value.filter((item) => Number(item.status) !== 1).length)
 const leftHealthScore = computed(() => healthScore.value)
 const leftAbnormalCount = computed(() => abnormalCount.value)
@@ -422,22 +422,22 @@ const leftCallouts = computed(() => [
   },
   {
     line1: `信号3 ${signalEntries.value[2]?.value?.toFixed?.(1) ?? '0.0'}`,
-    line2: `更新 ${displayTimestamp.value}`
+    line2: `信号4 ${signalEntries.value[3]?.value?.toFixed?.(1) ?? '0.0'}`
   }
 ])
 
 const rightCallouts = computed(() => [
   {
-    line1: `模式 ${overview.value.system_mode || '--'}`,
-    line2: `健康分 ${healthScore.value}`
+    line1: `模式1 ${overview.value.system_mode || '--'}`,
+    line2: `模式2 ${overview.value.system_mode || '--'}`
   },
   {
-    line1: `${radarDimensions.value[0] || '维度1'} ${Math.round(radarScores.value[0] ?? 0)}分`,
-    line2: `${radarDimensions.value[1] || '维度2'} ${Math.round(radarScores.value[1] ?? 0)}分`
+    line1: `${radarDimensions.value[0] || '维度1'} ${Math.round(radarScores.value[0] ?? 0)}`,
+    line2: `${radarDimensions.value[1] || '维度2'} ${Math.round(radarScores.value[1] ?? 0)}`
   },
   {
-    line1: `${radarDimensions.value[2] || '维度3'} ${Math.round(radarScores.value[2] ?? 0)}分`,
-    line2: `${radarDimensions.value[3] || '维度4'} ${Math.round(radarScores.value[3] ?? 0)}分`
+    line1: `${radarDimensions.value[2] || '维度3'} ${Math.round(radarScores.value[2] ?? 0)}`,
+    line2: `${radarDimensions.value[3] || '维度4'} ${Math.round(radarScores.value[3] ?? 0)}`
   }
 ])
 

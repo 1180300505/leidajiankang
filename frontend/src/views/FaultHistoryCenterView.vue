@@ -7,7 +7,7 @@
       </div>
       <div class="header-actions">
         <el-button class="action-btn ghost" @click="goBack">返回健康页</el-button>
-        <el-button class="action-btn" :loading="loading" @click="fetchData(currentPage)">刷新记录</el-button>
+        <el-button class="action-btn ghost" :loading="loading" @click="fetchData(currentPage)">刷新记录</el-button>
       </div>
     </header>
 
