@@ -44,13 +44,13 @@ class DeviceDB:
             self.db_path, 
             check_same_thread=False
         ) 
-        self.cursor = self.conn.cursor()
         self._create_table()
         self.source_ip = self.get_active_ip()
 
     def _create_table(self):
         """创建日志表及配置表"""
         # 1. 修改后的 system_logs 表，增加 source_ip
+        cursor = self.conn.cursor()
         sql_logs = '''
         CREATE TABLE IF NOT EXISTS system_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,10 +104,11 @@ class DeviceDB:
         )
         '''
         
-        self.cursor.execute(sql_logs)
-        self.cursor.execute(sql_errors)
-        self.cursor.execute(sql_health)
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_health_timestamp_algorithm ON health_score_records(timestamp, algorithm)")
+        cursor.execute(sql_logs)
+        cursor.execute(sql_errors)
+        cursor.execute(sql_health)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_health_timestamp_algorithm ON health_score_records(timestamp, algorithm)")
+        cursor.close()
         self.conn.commit()
     
     # --- IP 配置核心逻辑 ---
@@ -118,12 +119,14 @@ class DeviceDB:
         """
 
         # 尝试获取最新一条日志中的 IP
-        self.cursor.execute("SELECT source_ip FROM system_logs ORDER BY timestamp DESC LIMIT 1")
-        res = self.cursor.fetchone()
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT source_ip FROM system_logs ORDER BY timestamp DESC LIMIT 1")
+        res = cursor.fetchone()
         if res and res[0]:
             return res[0]
 
         # 若都没有，返回默认本地测试 IP
+        cursor.close()
         return "127.0.0.1"
     
     def set_active_ip(self, ip):
@@ -159,26 +162,34 @@ class DeviceDB:
             m1['power_on'], m1['status'], m1['current'], m1['voltage'], m1['inertia'], m1['temp'],
             m2['power_on'], m2['status'], m2['current'], m2['voltage'], m2['inertia'], m2['temp']
         )
-        
-        self.cursor.execute(sql, params)
+        cursor = self.conn.cursor()
+        cursor.execute(sql, params)
+        cursor.close()
         self.conn.commit()
 
     def query_by_time(self, start_time, end_time):
         """【查】查询指定时间段的数据"""
         sql = "SELECT * FROM system_logs WHERE timestamp BETWEEN ? AND ?"
-        self.cursor.execute(sql, (start_time, end_time))
-        return self.cursor.fetchall()
+        cursor = self.conn.cursor()
+        cursor.execute(sql, (start_time, end_time))
+        data = cursor.fetchall()
+        cursor.close()
+        return data
 
     def update_status(self, timestamp, new_mode):
         """【改】修改特定时间点的模式（示例）"""
         sql = "UPDATE system_logs SET sys_mode = ? WHERE timestamp = ?"
-        self.cursor.execute(sql, (new_mode, timestamp))
+        cursor = self.conn.cursor()
+        cursor.execute(sql, (new_mode, timestamp))
+        cursor.close()
         self.conn.commit()
 
     def delete_data(self, timestamp):
         """【删】删除特定时间的数据"""
         sql = "DELETE FROM system_logs WHERE timestamp = ?"
-        self.cursor.execute(sql, (timestamp,))
+        cursor = self.conn.cursor()
+        cursor.execute(sql, (timestamp,))
+        cursor.close()
         self.conn.commit()
 
     def close(self):
@@ -195,14 +206,16 @@ class DeviceDB:
         order_str = "DESC" if sort_order.upper() == "DESC" else "ASC"
         
         sql = f"SELECT * FROM system_logs ORDER BY timestamp {order_str} LIMIT ? OFFSET ?"
-        self.cursor.execute(sql, (page_size, offset))
+        cursor = self.conn.cursor()
+        cursor.execute(sql, (page_size, offset))
         
-        rows = self.cursor.fetchall()
-        keys = [desc[0] for desc in self.cursor.description]
+        rows = cursor.fetchall()
+        keys = [desc[0] for desc in cursor.description]
         data = [dict(zip(keys, row)) for row in rows]
         
-        self.cursor.execute("SELECT COUNT(*) FROM system_logs")
-        total = self.cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM system_logs")
+        total = cursor.fetchone()[0]
+        cursor.close()
         
         return data, total
 
@@ -210,44 +223,52 @@ class DeviceDB:
         """获取指定时间段内的所有记录"""
         sql = "SELECT * FROM system_logs WHERE datetime(timestamp) BETWEEN datetime(?) AND datetime(?)"
         print(f"DEBUG: 正在查询范围 {start_time} 到 {end_time}")
+        cursor = self.conn.cursor()
     
         # 先查一下数据库里最近的一条数据是什么时间，对比一下格式
-        self.cursor.execute("SELECT timestamp FROM system_logs ORDER BY timestamp DESC LIMIT 1")
-        last_record = self.cursor.fetchone()
+        cursor.execute("SELECT timestamp FROM system_logs ORDER BY timestamp DESC LIMIT 1")
+        last_record = cursor.fetchone()
         print(f"DEBUG: 数据库中最新的一条记录时间是: {last_record}")
-        self.cursor.execute(sql, (start_time, end_time))
-        rows = self.cursor.fetchall()
+        cursor.execute(sql, (start_time, end_time))
+        rows = cursor.fetchall()
+        cursor.close()
         print(f"查询到 {len(rows)} 条数据")
-        keys = [desc[0] for desc in self.cursor.description]
+        keys = [desc[0] for desc in cursor.description]
         return [dict(zip(keys, row)) for row in rows]
 
     def insert_error(self, timestamp, error_type, error_message):
         """记录错误信息，返回插入的行 id"""
         sql = "INSERT INTO system_errors (timestamp, error_type, error_message) VALUES (?, ?, ?)"
-        self.cursor.execute(sql, (timestamp, error_type, error_message))
+        cursor = self.conn.cursor()
+        cursor.execute(sql, (timestamp, error_type, error_message))
+        cursor.close()
         self.conn.commit()
-        return self.cursor.lastrowid
+        return cursor.lastrowid
 
     def query_errors(self, page=1, page_size=10, sort_order="DESC"):
         """分页查询故障记录。sort_order: DESC(最新在前) 或 ASC"""
         offset = (page - 1) * page_size
         order_str = "DESC" if sort_order.upper() == "DESC" else "ASC"
         sql = f"SELECT id, timestamp, error_type, error_message FROM system_errors ORDER BY id {order_str} LIMIT ? OFFSET ?"
-        self.cursor.execute(sql, (page_size, offset))
-        rows = self.cursor.fetchall()
-        keys = [desc[0] for desc in self.cursor.description]
+        cursor = self.conn.cursor()
+        cursor.execute(sql, (page_size, offset))
+        rows = cursor.fetchall()
+        keys = [desc[0] for desc in cursor.description]
         data = [dict(zip(keys, row)) for row in rows]
-        self.cursor.execute("SELECT COUNT(*) FROM system_errors")
-        total = self.cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM system_errors")
+        total = cursor.fetchone()[0]
+        cursor.close()
         return data, total
 
     def query_error_by_id(self, error_id):
         """按 id 查询单条故障记录"""
-        self.cursor.execute("SELECT id, timestamp, error_type, error_message FROM system_errors WHERE id = ?", (error_id,))
-        row = self.cursor.fetchone()
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id, timestamp, error_type, error_message FROM system_errors WHERE id = ?", (error_id,))
+        row = cursor.fetchone()
+        cursor.close()
         if not row:
             return None
-        keys = [desc[0] for desc in self.cursor.description]
+        keys = [desc[0] for desc in cursor.description]
         return dict(zip(keys, row))
 
     def insert_health_record(self, record: dict):
@@ -272,7 +293,9 @@ class DeviceDB:
             record.get("electrofeed_grade"),
             record.get("log_id"),
         )
-        self.cursor.execute(sql, params)
+        cursor = self.conn.cursor()
+        cursor.execute(sql, params)
+        cursor.close()
         self.conn.commit()
 
     def query_health_records(self, start_time, end_time, algorithm: str):
@@ -285,9 +308,11 @@ class DeviceDB:
           AND algorithm = ?
         ORDER BY timestamp ASC
         """
-        self.cursor.execute(sql, (start_time, end_time, algorithm))
-        rows = self.cursor.fetchall()
-        keys = [desc[0] for desc in self.cursor.description]
+        cursor = self.conn.cursor()
+        cursor.execute(sql, (start_time, end_time, algorithm))
+        rows = cursor.fetchall()
+        cursor.close()
+        keys = [desc[0] for desc in cursor.description]
         return [dict(zip(keys, row)) for row in rows]
 
     def calculate_daily_score(self, target_date_str):
@@ -302,8 +327,10 @@ class DeviceDB:
             WHERE timestamp LIKE ? 
             GROUP BY error_type
         """
-        self.cursor.execute(query, (f"{target_date_str}%",))
-        results = self.cursor.fetchall()
+        cursor = self.conn.cursor()
+        cursor.execute(query, (f"{target_date_str}%",))
+        results = cursor.fetchall()
+        cursor.close()
 
         # 2. 初始满分 100
         score = 100

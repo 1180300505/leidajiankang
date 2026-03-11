@@ -1,3 +1,7 @@
+# 1. 必须在最顶端
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, jsonify, request, send_file, make_response
 import io
 import json
@@ -10,6 +14,7 @@ from typing import Optional
 from docx_exporter import export_full_docx, export_health_report_docx, export_fault_report_docx
 from central_controller import analyze_data
 from health_assessment import train_from_db, HealthService
+
 
 # 1. 初始化数据库
 db_name = "device_monitor.db"
@@ -90,7 +95,7 @@ app = Flask(__name__)
 # 关键点：expose_headers 必须包含内容处置头
 CORS(app, expose_headers=["Content-Disposition"])
 # 初始化 SocketIO，允许跨域
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 
 # 对应前端的 GET 请求 (接收数据)
@@ -448,4 +453,13 @@ if __name__ == '__main__':
     # 必须使用 socketio.run
     # host='0.0.0.0' 确保局域网手机能访问
     # allow_unsafe_werkzeug=True 是为了在开发环境下强制运行
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    # socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+
+   # 3. 在 Eventlet 模式下，socketio.run 会自动检测并启动生产级服务器
+    # 它不再使用 Flask 开发服务器，因此不会有那个警告
+    print("-------------------------------------------")
+    print("雷达健康监测系统 - Eventlet 生产级服务器已启动")
+    print("WebSocket 模式: 正常运行")
+    print("-------------------------------------------")
+    
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
