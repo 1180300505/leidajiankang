@@ -7,6 +7,9 @@ data.csv
 node_modules/
 frontend/node_modules/
 *.docx
+backend/build/
+backend/venv_build/
+backend/*.spec
 
 # python venv
 .venv/
