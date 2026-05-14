@@ -1,3 +1,30 @@
+后端的主要功能包括数据接收、日志管理、健康评估以及故障记录等。以下是各个功能的详细介绍及其实现方法： 
+1. 数据接收与处理： 
+   - 功能描述：接收前端发送的数据，并进行解析。
+   - 实现方法：使用`Flask`框架中的`@app.route('/api/send-item', methods=['POST'])`装饰器来定义一个API路由，接收POST请求。通过`request.json`获取前端发送的JSON数据，并使用`parse_info`模块中的`parse_info`函数解析这些数据。随后，使用`socketio.emit('update_dashboard', dashboard_json)`推送解析后的数据到前端，供前端页面更新。
+
+2. 日志管理： 
+    - 功能描述：提供分页查询日志的功能，并支持删除日志记录。
+    - 实现方法：使用`@app.route('/api/logs', methods=['GET'])`和`@app.route("/api/logs/\<int:log_id\>", methods=["DELETE"])`来定义API路由。通过`request.args.get`获取分页查询的参数（如页码、每页条数等），并使用数据库模块查询相应的日志记录。删除日志的功能通过指定的日志ID进行，删除后返回成功信息。
+
+1. 健康评估： 
+    - 功能描述：根据接收到的数据评估设备的健康状态，并提供导出健康报告的功能。
+    - 实现方法：使用`@app.route('/api/health/algorithm', methods=['GET', 'POST'])`来定义API路由，用于获取和切换健康评估算法（如kmeans和som）。通过train_from_db函数训练健康评估模型，使用_health_algorithm全局变量来保存当前使用的算法。健康评估报告的导出通过`@app.route('/api/export/docx', methods=['GET'])`实现，调用`export_full_docx`或`export_health_report_docx`导出Word格式的报告。
+
+1. 故障记录管理： 
+   - 功能描述：查询和导出故障记录，支持分页查询和按ID查询。
+   - 实现方法：使用`@app.route('/api/errors', methods=['GET'])`和`@app.route('/api/errors/\<int:error_id\>', methods=['GET'])`来定义API路由，分别用于分页查询和按ID查询故障记录。查询结果通过JSON格式返回给前端。导出故障报告的功能通过`@app.route('/api/errors/0\<int:error_id\>/export/docx', methods=['GET'])`实现，调用`export_fault_report_docx`导出Word格式的报告。
+
+2. 配置管理： 
+    - 功能描述：管理允许的IP地址和健康评估的阈值。
+    - 实现方法：使用`@app.route('/api/config/ip', methods=['GET', 'POST'])`来定义API路由，用于获取和更新允许的IP地址。使用`@app.route('/api/health/thresholds', methods=['GET', 'POST'])`来定义API路由，用于获取和更新健康评估的阈值。
+
+1. 数据训练： 
+    - 功能描述：支持使用数据库中的数据重新训练健康评估模型。
+    - 实现方法：通过`@app.route('/api/health/retrain', methods=['POST'])`定义API路由，使用`train_from_db`函数重新训练健康评估模型。
+
+后端的实现主要依赖于`Flask`框架来构建API，使用`SocketIO`来实现实时数据推送。数据库操作通过`DeviceDB`类来完成，健康评估模型的训练和评估则通过`HealthService`类来实现。
+
 # 健康评估模块
 
 基于 KMeans 与 SOM（自组织映射神经网络）的健康度监测，支持整体与子系统评估，算法及数据处理器可互相替换。
